@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGIC - Login</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Segoe UI',system-ui,sans-serif;
+  background:#0f1923;color:#e2e8f0;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+}
+.login-container{
+  background:rgba(26,38,52,.95);border:1px solid rgba(251,191,36,.15);
+  border-radius:16px;padding:40px;width:380px;
+  box-shadow:0 0 40px rgba(251,191,36,.08);
+}
+.logo{text-align:center;margin-bottom:30px}
+.logo-icon{
+  width:80px;height:80px;border-radius:50%;
+  background:linear-gradient(135deg,#f59e0b,#fbbf24);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 16px;box-shadow:0 0 30px rgba(251,191,36,.25);
+  font-size:36px;
+}
+.logo h1{font-size:20px;font-weight:700;color:#fbbf24;letter-spacing:2px}
+.logo p{font-size:11px;color:#94a3b8;margin-top:4px;letter-spacing:1px}
+.form-group{margin-bottom:18px}
+.form-group label{display:block;font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+.form-group input{
+  width:100%;padding:12px 16px;background:rgba(15,25,35,.8);
+  border:1px solid rgba(251,191,36,.15);border-radius:8px;
+  color:#e2e8f0;font-size:14px;transition:border-color .2s;
+}
+.form-group input:focus{outline:none;border-color:#fbbf24;box-shadow:0 0 10px rgba(251,191,36,.15)}
+.btn-login{
+  width:100%;padding:14px;background:linear-gradient(135deg,#d97706,#fbbf24);
+  border:none;border-radius:8px;color:#1a2634;font-size:15px;font-weight:700;
+  cursor:pointer;letter-spacing:1px;transition:transform .15s;
+}
+.btn-login:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(251,191,36,.3)}
+.erro{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:#fca5a5;text-align:center}
+.footer{text-align:center;margin-top:24px;font-size:11px;color:#4a5568}
+.footer span{color:#fbbf24}
+</style>
+</head>
+<body>
+<div class="login-container">
+  <div class="logo">
+    <div class="logo-icon">&#9889;</div>
+    <h1>SIGIC</h1>
+    <p>GERENCIAMENTO DA COLONIA</p>
+  </div>
+  {% if erro %}<div class="erro">{{ erro }}</div>{% endif %}
+  <form method="POST">
+    <div class="form-group">
+      <label>Usuario</label>
+      <input type="text" name="usuario" placeholder="Digite seu usuario" autofocus>
+    </div>
+    <div class="form-group">
+      <label>Senha</label>
+      <input type="password" name="senha" placeholder="Digite sua senha">
+    </div>
+    <button type="submit" class="btn-login">ACESSAR SIGIC</button>
+  </form>
+  <div class="footer">Fase IV - <span>FIAP 2026</span></div>
+</div>
+</body>
+</html>

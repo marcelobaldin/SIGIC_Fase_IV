@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGIC - Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1923;--card:#1a2634;--sidebar:#141e2b;--yellow:#fbbf24;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#8b5cf6;--text:#e2e8f0;--muted:#94a3b8;--border:rgba(251,191,36,.1)}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh}
+.sidebar{width:210px;min-height:100vh;background:var(--sidebar);border-right:1px solid var(--border);position:fixed;left:0;top:0;bottom:0;z-index:100;display:flex;flex-direction:column;padding:16px 0}
+.sidebar .brand{padding:0 16px 16px;border-bottom:1px solid var(--border);text-align:center}
+.sidebar .brand h2{color:var(--yellow);font-size:16px;letter-spacing:2px}
+.sidebar .brand small{color:var(--muted);font-size:9px;letter-spacing:1px}
+.sidebar nav{flex:1;padding:12px 0}
+.sidebar nav a{display:flex;align-items:center;gap:8px;padding:9px 16px;color:var(--muted);text-decoration:none;font-size:12px;border-left:3px solid transparent;transition:.15s}
+.sidebar nav a:hover,.sidebar nav a.active{color:var(--yellow);background:rgba(251,191,36,.05);border-left-color:var(--yellow)}
+.sidebar nav a .icon{width:16px;text-align:center}
+.sidebar .user{padding:12px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)}
+.sidebar .user strong{color:var(--text);display:block;margin-bottom:2px}
+.sidebar .user a{color:var(--red);text-decoration:none;font-size:10px}
+.main{margin-left:210px;flex:1;padding:20px 24px}
+.main h1{font-size:18px;margin-bottom:16px}
+section{display:none}section.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+.card .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.card .value{font-size:22px;font-weight:700}
+.card .sub{font-size:10px;color:var(--muted);margin-top:3px}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700}
+.badge-ativo{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.badge-critico{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.badge-alerta{background:rgba(251,191,36,.15);color:var(--yellow);border:1px solid rgba(251,191,36,.3)}
+.chart-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+.chart-box h3{font-size:12px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+.chart-wrap{position:relative;height:260px}
+.modulos-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.mod-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;border-left:3px solid var(--green)}
+.mod-card .mc-name{font-size:12px;font-weight:600;margin-bottom:3px}
+.mod-card .mc-info{font-size:10px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th{background:rgba(251,191,36,.06);color:var(--yellow);padding:8px 10px;text-align:left;font-weight:600;border-bottom:1px solid var(--border)}
+table td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.03)}
+table tr:hover td{background:rgba(251,191,36,.03)}
+.algo-panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.algo-panel h3{font-size:13px;color:var(--yellow);margin-bottom:10px}
+.algo-panel select,.algo-panel button{padding:8px 12px;border-radius:6px;font-size:12px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer}
+.algo-panel button{background:rgba(251,191,36,.15);color:var(--yellow);font-weight:600;border-color:rgba(251,191,36,.3)}
+.algo-panel button:hover{background:rgba(251,191,36,.25)}
+.result-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto}
+.prev-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+.prev-card h3{font-size:13px;color:var(--yellow);margin-bottom:10px}
+.prev-stat{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px}
+.prev-stat .ps{text-align:center}
+.prev-stat .ps .ps-val{font-size:20px;font-weight:700}
+.prev-stat .ps .ps-lbl{font-size:9px;color:var(--muted);text-transform:uppercase}
+.esg-meter{width:100%;height:20px;background:var(--bg);border-radius:10px;overflow:hidden;margin:8px 0}
+.esg-meter .fill{height:100%;border-radius:10px;transition:width .5s}
+.rec-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:12px}
+.rec-item .rec-area{font-weight:600;color:var(--yellow);margin-bottom:3px}
+.rec-item .rec-impacto{font-size:10px;float:right}
+canvas.graph-canvas{background:var(--bg);border:1px solid var(--border);border-radius:10px}
+.pct-plugin{font-weight:bold}
+@media(max-width:900px){.chart-row{grid-template-columns:1fr}.sidebar{width:170px}.main{margin-left:170px;padding:14px}}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="brand"><h2>&#9889; SIGIC</h2><small>FASE IV - FIAP 2026</small></div>
+  <nav>
+    <a href="#" data-sec="visao" class="active"><span class="icon">&#9678;</span> Visao Geral</a>
+    <a href="#" data-sec="rede"><span class="icon">&#128376;</span> Rede da Colonia</a>
+    <a href="#" data-sec="algoritmos"><span class="icon">&#128295;</span> Algoritmos</a>
+    <a href="#" data-sec="energia"><span class="icon">&#9889;</span> Energia</a>
+    <a href="#" data-sec="modelagem"><span class="icon">&#128200;</span> Modelagem</a>
+    <a href="#" data-sec="previsao"><span class="icon">&#128202;</span> Previsao</a>
+    <a href="#" data-sec="esg"><span class="icon">&#127793;</span> ESG</a>
+  </nav>
+  <div class="user"><strong>{{ nome }}</strong>Operador SIGIC<br><a href="/logout">Sair</a></div>
+</div>
+
+<div class="main">
+
+<!-- VISAO GERAL -->
+<section id="sec-visao" class="active">
+  <h1>Visao Geral da Colonia</h1>
+  <div class="cards" id="cards-visao"></div>
+  <h3 style="font-size:13px;color:var(--muted);margin:12px 0 6px">Modulos da Base</h3>
+  <div class="modulos-grid" id="modulos-grid"></div>
+</section>
+
+<!-- REDE -->
+<section id="sec-rede">
+  <h1>Rede da Colonia (Grafo)</h1>
+  <div class="chart-row">
+    <div class="chart-box"><h3>Grafo da Rede</h3><canvas id="graph-canvas" class="graph-canvas" width="500" height="400"></canvas></div>
+    <div class="chart-box"><h3>Metricas da Rede</h3><div id="rede-metricas"></div><h3 style="margin-top:14px">Pontos de Articulacao</h3><div id="rede-articulacoes"></div></div>
+  </div>
+  <h3 style="font-size:13px;color:var(--muted);margin:12px 0 6px">Lista de Adjacencia</h3>
+  <div id="adj-lista" style="font-size:12px;font-family:monospace;background:var(--card);padding:14px;border-radius:8px;border:1px solid var(--border)"></div>
+  <h3 style="font-size:13px;color:var(--muted);margin:12px 0 6px">Matriz de Adjacencia</h3>
+  <div id="adj-matriz" style="overflow-x:auto"></div>
+</section>
+
+<!-- ALGORITMOS -->
+<section id="sec-algoritmos">
+  <h1>Algoritmos de Redes</h1>
+  <div class="algo-panel">
+    <h3>BFS - Busca em Largura</h3>
+    <label style="font-size:11px;color:var(--muted)">Origem:</label>
+    <select id="bfs-origem"></select>
+    <button onclick="executarBFS()">Executar BFS</button>
+    <div class="result-box" id="bfs-result">Selecione um modulo e clique em Executar.</div>
+  </div>
+  <div class="algo-panel">
+    <h3>DFS - Busca em Profundidade</h3>
+    <label style="font-size:11px;color:var(--muted)">Origem:</label>
+    <select id="dfs-origem"></select>
+    <button onclick="executarDFS()">Executar DFS</button>
+    <div class="result-box" id="dfs-result">Selecione um modulo e clique em Executar.</div>
+  </div>
+  <div class="algo-panel">
+    <h3>Dijkstra - Caminho Minimo</h3>
+    <label style="font-size:11px;color:var(--muted)">Origem:</label>
+    <select id="dij-origem"></select>
+    <label style="font-size:11px;color:var(--muted);margin-left:10px">Destino:</label>
+    <select id="dij-destino"></select>
+    <button onclick="executarDijkstra()">Encontrar Caminho</button>
+    <div class="result-box" id="dij-result">Selecione origem e destino.</div>
+  </div>
+</section>
+
+<!-- ENERGIA -->
+<section id="sec-energia">
+  <h1>Painel de Energia</h1>
+  <div class="cards" id="cards-energia"></div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>Geracao vs Consumo (kWh)</h3><div class="chart-wrap"><canvas id="chart-en-bar"></canvas></div></div>
+    <div class="chart-box"><h3>Estado de Carga - SoC (%)</h3><div class="chart-wrap"><canvas id="chart-soc"></canvas></div></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>Distribuicao Solar vs Eolica</h3><div class="chart-wrap"><canvas id="chart-dist-en"></canvas></div></div>
+    <div class="chart-box"><h3>Eficiencia da Rede</h3><div class="chart-wrap"><canvas id="chart-efic"></canvas></div></div>
+  </div>
+</section>
+
+<!-- MODELAGEM -->
+<section id="sec-modelagem">
+  <h1>Modelagem Matematica</h1>
+  <div id="model-info"></div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>E(t) - Consumo Modelado vs Real</h3><div class="chart-wrap"><canvas id="chart-modelo"></canvas></div></div>
+    <div class="chart-box"><h3>E'(t) - Derivada (Taxa de Variacao)</h3><div class="chart-wrap"><canvas id="chart-derivada"></canvas></div></div>
+  </div>
+</section>
+
+<!-- PREVISAO -->
+<section id="sec-previsao">
+  <h1>Previsao e Classificacao</h1>
+  <div id="prev-info"></div>
+  <div class="algo-panel">
+    <h3>Simular Cenario</h3>
+    <label style="font-size:11px;color:var(--muted)">Consumo (kWh):</label>
+    <input type="number" id="sim-consumo" value="200" style="width:80px;padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+    <label style="font-size:11px;color:var(--muted);margin-left:10px">Geracao (kWh):</label>
+    <input type="number" id="sim-geracao" value="30" style="width:80px;padding:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text)">
+    <button onclick="simularCenario()">Prever</button>
+    <div class="result-box" id="sim-result">Ajuste os valores e clique em Prever.</div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>Custo Logistico (Treinamento)</h3><div class="chart-wrap"><canvas id="chart-custo-log"></canvas></div></div>
+    <div class="chart-box"><h3>Matriz de Confusao</h3><div id="conf-matrix" style="padding:20px;text-align:center"></div></div>
+  </div>
+</section>
+
+<!-- ESG -->
+<section id="sec-esg">
+  <h1>Sustentabilidade e ESG</h1>
+  <div class="cards" id="cards-esg"></div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>Score ESG</h3><div id="esg-scores"></div></div>
+    <div class="chart-box"><h3>Distribuicao de Consumo por Tipo</h3><div class="chart-wrap"><canvas id="chart-consumo-tipo"></canvas></div></div>
+  </div>
+  <h3 style="font-size:13px;color:var(--muted);margin:12px 0 6px">Recomendacoes</h3>
+  <div id="esg-recs"></div>
+</section>
+
+</div>
+
+<script>
+const cache={}, charts={};
+const NOMES = {HAB:'Habitacao',CTR:'Centro de Controle',ARM:'Arm. Energia',OXI:'Prod. Oxigenio',COM:'Comunicacao',MED:'Suporte Medico',AGR:'Agricultura',LAB:'Laboratorio'};
+
+document.querySelectorAll('.sidebar nav a').forEach(a=>{
+  a.addEventListener('click',e=>{
+    e.preventDefault();
+    document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));
+    a.classList.add('active');
+    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+    document.getElementById('sec-'+a.dataset.sec).classList.add('active');
+    load(a.dataset.sec);
+  });
+});
+
+function api(url){if(cache[url])return Promise.resolve(cache[url]);return fetch(url).then(r=>r.json()).then(d=>{cache[url]=d;return d})}
+function dc(id){if(charts[id]){charts[id].destroy();delete charts[id]}}
+const cDef={responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}}},scales:{x:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'rgba(255,255,255,.03)'}},y:{ticks:{color:'#64748b',font:{size:9}},grid:{color:'rgba(255,255,255,.05)'}}}};
+const pctPlugin={id:'pct',afterDatasetsDraw(c){if(c.config.type!=='doughnut'&&c.config.type!=='pie')return;c.data.datasets.forEach((ds,di)=>{const m=c.getDatasetMeta(di);const t=ds.data.reduce((a,b)=>a+b,0);if(!t)return;m.data.forEach((el,i)=>{const p=((ds.data[i]/t)*100).toFixed(1)+'%';const{x,y}=el.tooltipPosition();c.ctx.save();c.ctx.fillStyle='#fff';c.ctx.font='bold 11px sans-serif';c.ctx.textAlign='center';c.ctx.textBaseline='middle';c.ctx.fillText(p,x,y);c.ctx.restore()})})}};
+
+function load(sec){({visao:loadVisao,rede:loadRede,algoritmos:loadAlgo,energia:loadEnergia,modelagem:loadModel,previsao:loadPrev,esg:loadESG})[sec]?.()}
+
+/* VISAO GERAL */
+function loadVisao(){
+  api('/api/visao-geral').then(d=>{
+    const e=d.energia;
+    document.getElementById('cards-visao').innerHTML=`
+      <div class="card"><div class="label">SoC Bateria</div><div class="value" style="color:${e.soc<30?'var(--red)':e.soc<50?'var(--yellow)':'var(--green)'}">${e.soc}%</div></div>
+      <div class="card"><div class="label">Geracao Total</div><div class="value">${e.geracao_total} kWh</div><div class="sub">Solar ${e.geracao_solar} + Eolica ${e.geracao_eolica}</div></div>
+      <div class="card"><div class="label">Consumo</div><div class="value">${e.consumo} kWh</div></div>
+      <div class="card"><div class="label">Balanco</div><div class="value" style="color:${e.balanco<0?'var(--red)':'var(--green)'}">${e.balanco>0?'+':''}${e.balanco}</div></div>
+      <div class="card"><div class="label">Eficiencia</div><div class="value">${(e.eficiencia*100).toFixed(0)}%</div></div>
+      <div class="card"><div class="label">Score ESG</div><div class="value" style="color:var(--yellow)">${d.score_esg}</div></div>
+    `;
+    let mg='';
+    for(const[k,m]of Object.entries(d.modulos)){
+      mg+=`<div class="mod-card"><div class="mc-name">${m.nome}</div><div class="mc-info">${m.consumo_kwh} kWh | Prior. ${m.prioridade}</div><div class="mc-info">${m.descricao}</div><span class="badge badge-ativo" style="margin-top:6px">${m.status.toUpperCase()}</span></div>`;
+    }
+    document.getElementById('modulos-grid').innerHTML=mg;
+  });
+}
+
+/* REDE */
+function loadRede(){
+  api('/api/rede').then(d=>{
+    // Metricas
+    const e=d.eficiencia;
+    document.getElementById('rede-metricas').innerHTML=`
+      <table><tr><td>Vertices</td><td><strong>${e.vertices}</strong></td></tr>
+      <tr><td>Arestas</td><td><strong>${e.arestas}</strong></td></tr>
+      <tr><td>Grau Medio</td><td><strong>${e.grau_medio}</strong></td></tr>
+      <tr><td>Densidade</td><td><strong>${e.densidade}</strong></td></tr>
+      <tr><td>Custo Medio</td><td><strong>${e.custo_medio} kWh</strong></td></tr>
+      <tr><td>Diametro</td><td><strong>${e.diametro} kWh</strong></td></tr></table>`;
+    document.getElementById('rede-articulacoes').innerHTML=d.articulacoes.length>0
+      ?d.articulacoes.map(a=>`<span class="badge badge-critico" style="margin:2px">${a} (${NOMES[a]})</span>`).join('')
+      :'<span style="color:var(--green);font-size:12px">Nenhum ponto de articulacao - rede robusta</span>';
+
+    // Lista adjacencia
+    let al='';
+    for(const[v,vizs]of Object.entries(d.adj_lista)){
+      al+=`<strong style="color:var(--yellow)">${v}</strong> -> ${vizs.map(([n,w])=>`${n}(${w})`).join(', ')}\n`;
+    }
+    document.getElementById('adj-lista').innerHTML=al;
+
+    // Matriz adjacencia
+    let mt='<table><tr><th></th>';
+    d.vertices.forEach(v=>mt+=`<th>${v}</th>`);
+    mt+='</tr>';
+    d.adj_matriz.forEach((row,i)=>{
+      mt+=`<tr><th>${d.vertices[i]}</th>`;
+      row.forEach(val=>mt+=`<td style="${val>0?'color:var(--yellow);font-weight:600':''}">${val||'-'}</td>`);
+      mt+='</tr>';
+    });
+    mt+='</table>';
+    document.getElementById('adj-matriz').innerHTML=mt;
+
+    // Desenhar grafo no canvas
+    drawGraph(d);
+  });
+}
+
+function drawGraph(d){
+  const c=document.getElementById('graph-canvas');
+  const ctx=c.getContext('2d');
+  const W=c.width,H=c.height;
+  ctx.clearRect(0,0,W,H);
+
+  const pos={HAB:[250,80],CTR:[100,140],ARM:[250,30],OXI:[400,140],COM:[80,250],MED:[180,280],AGR:[320,280],LAB:[420,250]};
+
+  // Arestas
+  ctx.strokeStyle='rgba(251,191,36,.3)';ctx.lineWidth=1.5;
+  d.conexoes.forEach(([u,v,w])=>{
+    const[x1,y1]=pos[u],[x2,y2]=pos[v];
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    ctx.fillStyle='#94a3b8';ctx.font='9px sans-serif';
+    ctx.fillText(w+' kWh',(x1+x2)/2-12,(y1+y2)/2-4);
+  });
+
+  // Vertices
+  d.vertices.forEach(v=>{
+    const[x,y]=pos[v];
+    const m=d.adj_lista[v];
+    const pri=({'HAB':1,'CTR':2,'ARM':3,'OXI':1,'COM':4,'MED':3,'AGR':5,'LAB':6})[v];
+    ctx.beginPath();ctx.arc(x,y,18,0,Math.PI*2);
+    ctx.fillStyle=pri<=2?'#22c55e':pri<=4?'#3b82f6':'#64748b';
+    ctx.fill();ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(v,x,y-2);
+    ctx.font='8px sans-serif';ctx.fillStyle='#e2e8f0';
+    ctx.fillText(NOMES[v]||'',x,y+10);
+  });
+}
+
+/* ALGORITMOS */
+function loadAlgo(){
+  api('/api/rede').then(d=>{
+    ['bfs-origem','dfs-origem','dij-origem','dij-destino'].forEach(id=>{
+      const sel=document.getElementById(id);
+      if(sel.options.length>0)return;
+      d.vertices.forEach(v=>{const o=document.createElement('option');o.value=v;o.text=v+' - '+NOMES[v];sel.add(o)});
+    });
+  });
+}
+function executarBFS(){
+  const o=document.getElementById('bfs-origem').value;
+  fetch('/api/bfs/'+o).then(r=>r.json()).then(d=>{
+    let txt=`BFS a partir de ${o} (${NOMES[o]}):\n\nOrdem de visita: ${d.ordem.join(' -> ')}\n\nDistancias (saltos):\n`;
+    for(const[v,dist]of Object.entries(d.distancias))txt+=`  ${v}: ${dist} salto(s)\n`;
+    document.getElementById('bfs-result').textContent=txt;
+  });
+}
+function executarDFS(){
+  const o=document.getElementById('dfs-origem').value;
+  fetch('/api/dfs/'+o).then(r=>r.json()).then(d=>{
+    document.getElementById('dfs-result').textContent=`DFS a partir de ${o} (${NOMES[o]}):\n\nOrdem de visita: ${d.ordem.join(' -> ')}`;
+  });
+}
+function executarDijkstra(){
+  const o=document.getElementById('dij-origem').value;
+  const dest=document.getElementById('dij-destino').value;
+  fetch(`/api/dijkstra/${o}/${dest}`).then(r=>r.json()).then(d=>{
+    if(d.existe){
+      const nomes=d.caminho.map(v=>v+' ('+NOMES[v]+')');
+      document.getElementById('dij-result').textContent=`Dijkstra: ${o} -> ${dest}\n\nCaminho: ${nomes.join(' -> ')}\nCusto total: ${d.custo} kWh`;
+    }else{
+      document.getElementById('dij-result').textContent='Nao ha caminho entre os modulos selecionados.';
+    }
+  });
+}
+
+/* ENERGIA */
+function loadEnergia(){
+  api('/api/energia').then(d=>{
+    const lastSoc=d.soc[d.soc.length-1];
+    const totalS=d.solar.reduce((a,b)=>a+b,0);
+    const totalE=d.eolica.reduce((a,b)=>a+b,0);
+    const totalC=d.consumo.reduce((a,b)=>a+b,0);
+    document.getElementById('cards-energia').innerHTML=`
+      <div class="card"><div class="label">SoC Atual</div><div class="value" style="color:${lastSoc<30?'var(--red)':lastSoc<50?'var(--yellow)':'var(--green)'}">${lastSoc}%</div></div>
+      <div class="card"><div class="label">Solar 24h</div><div class="value">${totalS} kWh</div></div>
+      <div class="card"><div class="label">Eolica 24h</div><div class="value">${totalE} kWh</div></div>
+      <div class="card"><div class="label">Consumo 24h</div><div class="value">${totalC} kWh</div></div>`;
+    const hrs=d.horarios.map(h=>h+'h');
+    dc('chart-en-bar');
+    charts['chart-en-bar']=new Chart(document.getElementById('chart-en-bar'),{type:'bar',data:{labels:hrs,datasets:[{label:'Solar',data:d.solar,backgroundColor:'rgba(251,191,36,.7)'},{label:'Eolica',data:d.eolica,backgroundColor:'rgba(59,130,246,.7)'},{label:'Consumo',data:d.consumo,type:'line',borderColor:'#ef4444',borderWidth:2,pointRadius:3,fill:false}]},options:cDef});
+    dc('chart-soc');
+    charts['chart-soc']=new Chart(document.getElementById('chart-soc'),{type:'line',data:{labels:hrs,datasets:[{label:'SoC %',data:d.soc,borderColor:'#22c55e',backgroundColor:'rgba(34,197,94,.1)',fill:true,tension:.3,pointRadius:4}]},options:{...cDef,scales:{...cDef.scales,y:{...cDef.scales.y,min:0,max:100}}}});
+    dc('chart-dist-en');
+    charts['chart-dist-en']=new Chart(document.getElementById('chart-dist-en'),{type:'doughnut',data:{labels:['Solar','Eolica'],datasets:[{data:[totalS,totalE],backgroundColor:['#fbbf24','#3b82f6']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8'}}}},plugins:[pctPlugin]});
+    dc('chart-efic');
+    charts['chart-efic']=new Chart(document.getElementById('chart-efic'),{type:'line',data:{labels:hrs,datasets:[{label:'Eficiencia',data:d.eficiencia,borderColor:'#8b5cf6',backgroundColor:'rgba(139,92,246,.1)',fill:true,tension:.3,pointRadius:3}]},options:{...cDef,scales:{...cDef.scales,y:{...cDef.scales.y,min:0.8,max:1}}}});
+  });
+}
+
+/* MODELAGEM */
+function loadModel(){
+  api('/api/modelagem').then(d=>{
+    const pc=d.ponto_critico;
+    document.getElementById('model-info').innerHTML=`
+      <div class="prev-card"><h3>Modelo Quadratico do Consumo</h3>
+      <div class="prev-stat">
+        <div class="ps"><div class="ps-val" style="font-size:14px">${d.formula}</div><div class="ps-lbl">Funcao</div></div>
+        <div class="ps"><div class="ps-val">${d.r2}</div><div class="ps-lbl">R2</div></div>
+        <div class="ps"><div class="ps-val">${d.energia_total_24h}</div><div class="ps-lbl">Integral 0-24h (kWh)</div></div>
+        ${pc.t_critico?`<div class="ps"><div class="ps-val">${pc.t_critico}h</div><div class="ps-lbl">${pc.tipo} (${pc.valor} kWh)</div></div>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--muted)">Derivada: ${d.derivada_formula}</div></div>`;
+    dc('chart-modelo');
+    charts['chart-modelo']=new Chart(document.getElementById('chart-modelo'),{type:'line',data:{labels:d.horas.map(h=>h+'h'),datasets:[{label:'Modelo E(t)',data:d.valores_modelo,borderColor:'#fbbf24',tension:.3,pointRadius:1},{label:'Dados Reais',data:d.horas.map(h=>{const i=d.horas_reais.indexOf(h);return i>=0?d.dados_reais[i]:null}),borderColor:'#22c55e',pointRadius:4,pointStyle:'circle',showLine:false}]},options:cDef});
+    dc('chart-derivada');
+    charts['chart-derivada']=new Chart(document.getElementById('chart-derivada'),{type:'line',data:{labels:d.horas.map(h=>h+'h'),datasets:[{label:"E'(t)",data:d.derivadas,borderColor:'#8b5cf6',backgroundColor:'rgba(139,92,246,.1)',fill:true,tension:.3,pointRadius:1}]},options:cDef});
+  });
+}
+
+/* PREVISAO */
+function loadPrev(){
+  api('/api/previsao').then(d=>{
+    const rl=d.regressao_linear;
+    const rlog=d.regressao_logistica;
+    document.getElementById('prev-info').innerHTML=`
+      <div class="prev-card"><h3>Regressao Linear - Previsao de SoC</h3>
+      <div class="prev-stat">
+        <div class="ps"><div class="ps-val">${rl.r2}</div><div class="ps-lbl">R2</div></div>
+        <div class="ps"><div class="ps-val">${rl.rmse}</div><div class="ps-lbl">RMSE</div></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);font-family:monospace">${rl.formula}</div></div>
+      <div class="prev-card"><h3>Regressao Logistica - Classificacao Critico/Normal</h3>
+      <div class="prev-stat">
+        <div class="ps"><div class="ps-val">${(rlog.acuracia*100).toFixed(1)}%</div><div class="ps-lbl">Acuracia</div></div>
+        <div class="ps"><div class="ps-val">${rlog.variaveis.slice(1).join(', ')}</div><div class="ps-lbl">Features</div></div>
+      </div></div>`;
+    // Custo logistico
+    dc('chart-custo-log');
+    if(rlog.historico_custo.length>0){
+      charts['chart-custo-log']=new Chart(document.getElementById('chart-custo-log'),{type:'line',data:{labels:rlog.historico_custo.map((_,i)=>i*100),datasets:[{label:'Cross-Entropy',data:rlog.historico_custo,borderColor:'#ef4444',tension:.3,pointRadius:2,fill:false}]},options:{...cDef,scales:{...cDef.scales,x:{...cDef.scales.x,title:{display:true,text:'Epoca',color:'#64748b'}},y:{...cDef.scales.y,title:{display:true,text:'Custo',color:'#64748b'}}}}});
+    }
+    // Matriz confusao
+    const mc=rlog.matriz_confusao;
+    document.getElementById('conf-matrix').innerHTML=`
+      <table style="width:auto;margin:0 auto"><tr><th></th><th style="color:var(--green)">Pred. Normal</th><th style="color:var(--red)">Pred. Critico</th></tr>
+      <tr><th style="color:var(--green)">Real Normal</th><td style="background:rgba(34,197,94,.15);font-weight:700">${mc.tn} (VN)</td><td style="background:rgba(239,68,68,.1)">${mc.fp} (FP)</td></tr>
+      <tr><th style="color:var(--red)">Real Critico</th><td style="background:rgba(239,68,68,.1)">${mc.fn} (FN)</td><td style="background:rgba(34,197,94,.15);font-weight:700">${mc.tp} (VP)</td></tr></table>`;
+  });
+}
+
+function simularCenario(){
+  const consumo=document.getElementById('sim-consumo').value;
+  const geracao=document.getElementById('sim-geracao').value;
+  fetch('/api/prever',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({consumo,geracao})})
+  .then(r=>r.json()).then(d=>{
+    const cor=d.estado.classificacao==='CRITICO'?'var(--red)':'var(--green)';
+    document.getElementById('sim-result').innerHTML=`<span style="color:${cor};font-weight:700">${d.estado.classificacao}</span>\n\nSoC previsto: ${d.soc_previsto}%\nProbabilidade critico: ${(d.estado.probabilidade_critico*100).toFixed(1)}%\nConfianca: ${(d.estado.confianca*100).toFixed(1)}%\n\nModelo: ${d.modelo_linear}`;
+  });
+}
+
+/* ESG */
+function loadESG(){
+  api('/api/esg').then(d=>{
+    document.getElementById('cards-esg').innerHTML=`
+      <div class="card"><div class="label">Score ESG</div><div class="value" style="color:var(--yellow)">${d.score_esg}/100</div></div>
+      <div class="card"><div class="label">Renovavel</div><div class="value">${d.pct_renovavel.toFixed(1)}%</div></div>
+      <div class="card"><div class="label">CO2 Evitado</div><div class="value" style="color:var(--green)">${d.co2_evitado_kg} kg</div></div>
+      <div class="card"><div class="label">Eficiencia</div><div class="value">${(d.eficiencia_media*100).toFixed(1)}%</div></div>
+      <div class="card"><div class="label">Perdas</div><div class="value" style="color:var(--red)">${d.perda_estimada_kwh} kWh</div></div>
+      <div class="card"><div class="label">Essenciais</div><div class="value">${d.pct_consumo_essencial}%</div><div class="sub">do consumo total</div></div>`;
+    // Scores
+    document.getElementById('esg-scores').innerHTML=`
+      <div style="margin:10px 0"><span style="font-size:11px;color:var(--muted)">Environmental (${d.score_e.toFixed(0)})</span><div class="esg-meter"><div class="fill" style="width:${d.score_e}%;background:var(--green)"></div></div></div>
+      <div style="margin:10px 0"><span style="font-size:11px;color:var(--muted)">Social (${d.score_s.toFixed(0)})</span><div class="esg-meter"><div class="fill" style="width:${d.score_s}%;background:var(--blue)"></div></div></div>
+      <div style="margin:10px 0"><span style="font-size:11px;color:var(--muted)">Governance (${d.score_g.toFixed(0)})</span><div class="esg-meter"><div class="fill" style="width:${d.score_g}%;background:var(--purple)"></div></div></div>`;
+    // Consumo por tipo
+    const tipos={essencial:0,infraestrutura:0,suporte:0,operacional:0};
+    api('/api/visao-geral').then(v=>{
+      for(const m of Object.values(v.modulos)){
+        const t=({'Habitacao':'essencial','Centro de Controle':'essencial','Armazenamento de Energia':'infraestrutura','Producao de Oxigenio':'essencial','Comunicacao':'essencial','Suporte Medico':'essencial','Agricultura':'suporte','Laboratorio Cientifico':'operacional'})[m.nome]||'operacional';
+        tipos[t]+=m.consumo_kwh;
+      }
+      dc('chart-consumo-tipo');
+      charts['chart-consumo-tipo']=new Chart(document.getElementById('chart-consumo-tipo'),{type:'doughnut',data:{labels:['Essencial','Infraestrutura','Suporte','Operacional'],datasets:[{data:[tipos.essencial,tipos.infraestrutura,tipos.suporte,tipos.operacional],backgroundColor:['#22c55e','#3b82f6','#fbbf24','#64748b']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8'}}}},plugins:[pctPlugin]});
+    });
+    // Recomendacoes
+    let recs='';
+    d.recomendacoes.forEach(r=>{
+      const cor=r.impacto==='alto'?'var(--red)':'var(--yellow)';
+      recs+=`<div class="rec-item"><div class="rec-area">${r.area} <span class="rec-impacto badge" style="background:${cor}20;color:${cor};border:1px solid ${cor}40">${r.impacto.toUpperCase()}</span></div>${r.acao}</div>`;
+    });
+    document.getElementById('esg-recs').innerHTML=recs;
+  });
+}
+
+loadVisao();
+</script>
+</body>
+</html>
