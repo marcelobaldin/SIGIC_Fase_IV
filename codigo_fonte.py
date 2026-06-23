@@ -1,40 +1,31 @@
 #!/usr/bin/env python3
-"""
-SIGIC - Sistema Inteligente de Gerenciamento da Infraestrutura da Colonia
-Fase IV - Energia para Sobreviver | FIAP 2026
-Marcelo Bastianello Baldin - RM568746 - Grupo 13
-
-Execucao: python codigo_fonte.py
-Acesso: http://localhost:5050 (usuario: usuario / senha: senha)
-"""
+# =============================================================================
+# SIGIC - Sistema Inteligente de Gerenciamento da Infraestrutura da Colonia
+# Fase IV - Energia para Sobreviver | FIAP 2026
+# Marcelo Bastianello Baldin - RM568746 - Grupo 13
+#
+# Arquivo principal - executar: python codigo_fonte.py
+# Sem dependencias externas - usa apenas biblioteca padrao do Python.
+# =
+# ============================================================================
 
 import csv
 import os
 import math
 import heapq
 from collections import deque
-from functools import wraps
-from flask import (Flask, render_template, request, redirect,
-                   url_for, session, jsonify)
-
-# ============================================================
-# CONFIGURACOES
-# ============================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 AUX_DIR = os.path.join(BASE_DIR, 'arquivos_auxiliares')
 
-USUARIOS = {
-    'usuario': {'senha': 'senha', 'nome': 'Operador SIGIC'}
-}
 
-
-# ============================================================
+# =============================================================================
 # 1. ESTRUTURAS DE DADOS - MODULOS DA COLONIA
-# ============================================================
-# Listas, tuplas, dicionarios e matrizes conforme requisitos
+# =============================================================================
+# Tuplas (dados imutaveis), dicionarios (acesso por chave) e listas (iteracao).
+# Cada modulo representa um setor fisico da colonia Aurora Siger em Marte.
 
-# Tuplas: informacoes fixas dos modulos (nome, tipo, prioridade)
+# Tuplas: informacoes fixas (codigo, nome completo, tipo, nivel de prioridade)
 MODULOS_INFO = (
     ('HAB', 'Habitacao', 'essencial', 1),
     ('CTR', 'Centro de Controle', 'essencial', 2),
@@ -46,7 +37,7 @@ MODULOS_INFO = (
     ('LAB', 'Laboratorio Cientifico', 'operacional', 6),
 )
 
-# Dicionario: dados operacionais de cada modulo
+# Dicionario principal: dados operacionais detalhados de cada modulo
 MODULOS = {
     'HAB': {
         'nome': 'Habitacao',
@@ -54,7 +45,6 @@ MODULOS = {
         'prioridade': 1,
         'capacidade_arm_kwh': 100,
         'distancia_hub_m': 50,
-        'freq_comunicacao': 'alta',
         'status': 'ativo',
         'descricao': 'Acomodacao da tripulacao e suporte a sobrevivencia',
     },
@@ -64,7 +54,6 @@ MODULOS = {
         'prioridade': 2,
         'capacidade_arm_kwh': 50,
         'distancia_hub_m': 30,
-        'freq_comunicacao': 'alta',
         'status': 'ativo',
         'descricao': 'Monitoramento e gerenciamento das operacoes',
     },
@@ -74,7 +63,6 @@ MODULOS = {
         'prioridade': 3,
         'capacidade_arm_kwh': 500,
         'distancia_hub_m': 0,
-        'freq_comunicacao': 'media',
         'status': 'ativo',
         'descricao': 'Armazenamento central de energia (baterias Li-ion)',
     },
@@ -84,7 +72,6 @@ MODULOS = {
         'prioridade': 1,
         'capacidade_arm_kwh': 120,
         'distancia_hub_m': 60,
-        'freq_comunicacao': 'alta',
         'status': 'ativo',
         'descricao': 'Geracao e distribuicao de oxigenio para a base',
     },
@@ -94,7 +81,6 @@ MODULOS = {
         'prioridade': 4,
         'capacidade_arm_kwh': 30,
         'distancia_hub_m': 40,
-        'freq_comunicacao': 'alta',
         'status': 'ativo',
         'descricao': 'Troca de dados entre modulos e comunicacao com a Terra',
     },
@@ -104,7 +90,6 @@ MODULOS = {
         'prioridade': 3,
         'capacidade_arm_kwh': 40,
         'distancia_hub_m': 45,
-        'freq_comunicacao': 'media',
         'status': 'ativo',
         'descricao': 'Atendimento medico e monitoramento da saude',
     },
@@ -114,7 +99,6 @@ MODULOS = {
         'prioridade': 5,
         'capacidade_arm_kwh': 80,
         'distancia_hub_m': 70,
-        'freq_comunicacao': 'baixa',
         'status': 'ativo',
         'descricao': 'Producao de alimentos e sustentabilidade',
     },
@@ -124,16 +108,15 @@ MODULOS = {
         'prioridade': 6,
         'capacidade_arm_kwh': 60,
         'distancia_hub_m': 55,
-        'freq_comunicacao': 'baixa',
         'status': 'ativo',
         'descricao': 'Pesquisa e analise de materiais marcianos',
     },
 }
 
-# Lista: nomes dos modulos para iteracao
+# Lista de codigos dos modulos para iteracao
 LISTA_MODULOS = [cod for cod, _, _, _ in MODULOS_INFO]
 
-# Lista: conexoes da rede (origem, destino, peso em kWh de custo de transmissao)
+# Lista de conexoes da rede: (origem, destino, peso em kWh de custo de transmissao)
 CONEXOES = [
     ('ARM', 'HAB', 8),
     ('ARM', 'CTR', 5),
@@ -152,39 +135,38 @@ CONEXOES = [
 ]
 
 
-# ============================================================
+# =============================================================================
 # 2. REPRESENTACAO DA REDE - GRAFOS
-# ============================================================
+# =============================================================================
+# Grafo ponderado nao-dirigido: vertices = modulos, arestas = conexoes fisicas.
+# Peso das arestas = custo energetico de transmissao entre modulos (kWh).
+# Duas representacoes: lista de adjacencia (dicionario) e matriz de adjacencia.
 
 class GrafoColonia:
-    """Grafo ponderado nao-dirigido representando a rede da colonia.
+    """Grafo ponderado nao-dirigido representando a rede da colonia."""
 
-    Vertices = modulos da base marciana
-    Arestas = conexoes fisicas (cabos, dutos) com peso = custo energetico
-    Representacoes: lista de adjacencia E matriz de adjacencia
-    """
-
-    def __init__(self, vertices: list, arestas: list):
+    def __init__(self, vertices, arestas):
         self.vertices = vertices
         self.n = len(vertices)
         self.idx = {v: i for i, v in enumerate(vertices)}
 
-        # Lista de adjacencia (dicionario de listas)
-        self.adj_lista: dict[str, list[tuple[str, int]]] = {v: [] for v in vertices}
+        # Lista de adjacencia: dicionario onde cada chave aponta para lista de (vizinho, peso)
+        self.adj_lista = {v: [] for v in vertices}
         for u, v, w in arestas:
             self.adj_lista[u].append((v, w))
             self.adj_lista[v].append((u, w))
 
-        # Matriz de adjacencia (lista de listas)
-        self.adj_matriz: list[list[int]] = [[0] * self.n for _ in range(self.n)]
+        # Matriz de adjacencia: lista de listas (0 = sem conexao, >0 = peso)
+        self.adj_matriz = [[0] * self.n for _ in range(self.n)]
         for u, v, w in arestas:
             i, j = self.idx[u], self.idx[v]
             self.adj_matriz[i][j] = w
             self.adj_matriz[j][i] = w
 
-    # ---------- BFS - Busca em Largura ----------
-    def bfs(self, origem: str) -> dict:
-        """BFS a partir de um vertice. Retorna ordem de visita e distancias (saltos)."""
+    # ---- BFS: Busca em Largura ----
+    # Usa fila (deque) para explorar a rede nivel a nivel.
+    # Complexidade: O(V + E). Encontra caminho com menor numero de saltos.
+    def bfs(self, origem):
         visitado = {v: False for v in self.vertices}
         dist = {v: -1 for v in self.vertices}
         pai = {v: None for v in self.vertices}
@@ -207,9 +189,10 @@ class GrafoColonia:
 
         return {'ordem': ordem, 'distancias': dist, 'predecessores': pai}
 
-    # ---------- DFS - Busca em Profundidade ----------
-    def dfs(self, origem: str) -> dict:
-        """DFS a partir de um vertice. Retorna ordem de visita."""
+    # ---- DFS: Busca em Profundidade ----
+    # Usa recursao para explorar caminhos ate o fim antes de retroceder.
+    # Complexidade: O(V + E). Detecta componentes conectados e ciclos.
+    def dfs(self, origem):
         visitado = {v: False for v in self.vertices}
         ordem = []
         pai = {v: None for v in self.vertices}
@@ -225,9 +208,10 @@ class GrafoColonia:
         _dfs_rec(origem)
         return {'ordem': ordem, 'predecessores': pai}
 
-    # ---------- Dijkstra - Caminho Minimo ----------
-    def dijkstra(self, origem: str) -> dict:
-        """Dijkstra: caminho de menor custo a partir de um vertice."""
+    # ---- Dijkstra: Caminho de Menor Custo ----
+    # Usa heap (fila de prioridade) para encontrar o caminho de menor custo.
+    # Complexidade: O((V + E) log V). Otimiza rotas de distribuicao de energia.
+    def dijkstra(self, origem):
         dist = {v: float('inf') for v in self.vertices}
         pai = {v: None for v in self.vertices}
         dist[origem] = 0
@@ -248,8 +232,8 @@ class GrafoColonia:
 
         return {'distancias': dist, 'predecessores': pai}
 
-    def caminho_minimo(self, origem: str, destino: str) -> dict:
-        """Retorna o caminho minimo entre dois vertices e seu custo."""
+    def caminho_minimo(self, origem, destino):
+        """Retorna o caminho de menor custo entre dois vertices via Dijkstra."""
         resultado = self.dijkstra(origem)
         caminho = []
         atual = destino
@@ -263,12 +247,11 @@ class GrafoColonia:
             return {'caminho': [], 'custo': -1, 'existe': False}
         return {'caminho': caminho, 'custo': custo, 'existe': True}
 
-    # ---------- Conexoes criticas ----------
-    def detectar_pontos_articulacao(self) -> list:
-        """Identifica vertices cuja remocao desconecta o grafo (pontos de articulacao)."""
+    # ---- Deteccao de vertices criticos (pontos de articulacao) ----
+    # Remove cada vertice e verifica se o grafo continua conexo.
+    def detectar_pontos_articulacao(self):
         articulacoes = []
         for v in self.vertices:
-            # Remove vertice e verifica conectividade
             restantes = [u for u in self.vertices if u != v]
             if not restantes:
                 continue
@@ -285,32 +268,16 @@ class GrafoColonia:
                 articulacoes.append(v)
         return articulacoes
 
-    def arestas_criticas(self) -> list:
-        """Identifica arestas cuja remocao desconecta o grafo (pontes)."""
-        pontes = []
-        arestas = [(u, v, w) for u in self.vertices for v, w in self.adj_lista[u] if u < v]
-        for eu, ev, ew in arestas:
-            # Remove aresta e verifica conectividade via BFS
-            self.adj_lista[eu] = [(v, w) for v, w in self.adj_lista[eu] if v != ev]
-            self.adj_lista[ev] = [(v, w) for v, w in self.adj_lista[ev] if v != eu]
-            resultado = self.bfs(self.vertices[0])
-            if len(resultado['ordem']) < self.n:
-                pontes.append((eu, ev, ew))
-            self.adj_lista[eu].append((ev, ew))
-            self.adj_lista[ev].append((eu, ew))
-        return pontes
-
-    def eficiencia_rede(self) -> dict:
-        """Analisa eficiencia geral da rede."""
+    # ---- Metricas de eficiencia da rede ----
+    def eficiencia_rede(self):
         total_arestas = sum(1 for v in self.vertices for _ in self.adj_lista[v]) // 2
         grau_medio = sum(len(self.adj_lista[v]) for v in self.vertices) / self.n
         densidade = (2 * total_arestas) / (self.n * (self.n - 1)) if self.n > 1 else 0
 
-        # Custo medio de transmissao
         custos = [w for v in self.vertices for _, w in self.adj_lista[v]]
         custo_medio = sum(custos) / len(custos) if custos else 0
 
-        # Diametro do grafo (maior menor caminho)
+        # Diametro: maior menor caminho no grafo
         diametro = 0
         for v in self.vertices:
             dists = self.dijkstra(v)['distancias']
@@ -327,12 +294,13 @@ class GrafoColonia:
         }
 
 
-# ============================================================
-# 3. LEITURA DE DADOS ENERGETICOS
-# ============================================================
+# =============================================================================
+# 3. LEITURA DE DADOS ENERGETICOS (CSV)
+# =============================================================================
+# Dados auxiliares carregados de arquivos CSV na pasta arquivos_auxiliares/.
 
-def carregar_dados_energia(caminho: str) -> list[dict]:
-    """Carrega dados de energia do CSV."""
+def carregar_dados_energia(caminho):
+    """Carrega serie temporal de energia do CSV (24h de operacao)."""
     dados = []
     with open(caminho, 'r', encoding='utf-8') as f:
         for linha in csv.DictReader(f):
@@ -349,8 +317,8 @@ def carregar_dados_energia(caminho: str) -> list[dict]:
     return dados
 
 
-def carregar_historico_cenarios(caminho: str) -> list[dict]:
-    """Carrega historico de cenarios para treinamento dos modelos ML."""
+def carregar_historico_cenarios(caminho):
+    """Carrega historico de cenarios para treinamento dos modelos de previsao."""
     dados = []
     with open(caminho, 'r', encoding='utf-8') as f:
         for linha in csv.DictReader(f):
@@ -366,27 +334,24 @@ def carregar_historico_cenarios(caminho: str) -> list[dict]:
     return dados
 
 
-# ============================================================
-# 4. MODELAGEM MATEMATICA E OTIMIZACAO
-# ============================================================
+# =============================================================================
+# 4. MODELAGEM MATEMATICA - CALCULO DIFERENCIAL
+# =============================================================================
+# Funcao de consumo: E(t) = a*t^2 + b*t + c  (modelo quadratico)
+# Derivada: E'(t) = 2a*t + b  (taxa de variacao instantanea)
+# Integral numerica pelo metodo dos trapezios (energia total no intervalo)
 
 class ModelagemMatematica:
-    """Modelagem do consumo energetico com calculo diferencial.
-
-    Funcao de consumo: E(t) = a*t^2 + b*t + c  (quadratica)
-    Derivada: E'(t) = 2*a*t + b  (taxa de variacao instantanea)
-    Ponto critico: t* = -b/(2a)  (ponto de minimo/maximo)
-    """
+    """Modelagem do consumo energetico com calculo diferencial."""
 
     @staticmethod
-    def ajustar_modelo(dados: list[dict]) -> dict:
-        """Ajusta modelo quadratico E(t) = at^2 + bt + c por minimos quadrados."""
+    def ajustar_modelo(dados):
+        """Ajusta E(t) = at^2 + bt + c por minimos quadrados (sistema normal)."""
         n = len(dados)
         horas = [d['hora'] for d in dados]
         consumos = [d['consumo_total'] for d in dados]
 
-        # Sistema normal: X^T X beta = X^T y
-        # X = [t^2, t, 1]
+        # Montar e resolver o sistema normal X^T X beta = X^T y
         s4 = sum(t**4 for t in horas)
         s3 = sum(t**3 for t in horas)
         s2 = sum(t**2 for t in horas)
@@ -396,7 +361,7 @@ class ModelagemMatematica:
         sy1 = sum(t * y for t, y in zip(horas, consumos))
         sy0 = sum(consumos)
 
-        # Resolver sistema 3x3 (Cramer)
+        # Regra de Cramer para sistema 3x3
         det = s4*(s2*s0 - s1*s1) - s3*(s3*s0 - s1*s2) + s2*(s3*s1 - s2*s2)
         if abs(det) < 1e-10:
             return {'a': 0, 'b': 0, 'c': sum(consumos)/n}
@@ -408,18 +373,18 @@ class ModelagemMatematica:
         return {'a': round(a, 6), 'b': round(b, 4), 'c': round(c, 2)}
 
     @staticmethod
-    def avaliar(coefs: dict, t: float) -> float:
+    def avaliar(coefs, t):
         """Avalia E(t) = at^2 + bt + c."""
         return coefs['a'] * t**2 + coefs['b'] * t + coefs['c']
 
     @staticmethod
-    def derivada(coefs: dict, t: float) -> float:
-        """Calcula E'(t) = 2at + b (taxa de variacao instantanea)."""
+    def derivada(coefs, t):
+        """Calcula E'(t) = 2at + b (taxa de variacao instantanea do consumo)."""
         return 2 * coefs['a'] * t + coefs['b']
 
     @staticmethod
-    def ponto_critico(coefs: dict) -> dict:
-        """Encontra ponto critico t* = -b/(2a)."""
+    def ponto_critico(coefs):
+        """Encontra ponto critico t* = -b/(2a) — minimo ou maximo do consumo."""
         if abs(coefs['a']) < 1e-10:
             return {'t_critico': None, 'tipo': 'linear', 'valor': None}
         t_crit = -coefs['b'] / (2 * coefs['a'])
@@ -428,8 +393,8 @@ class ModelagemMatematica:
         return {'t_critico': round(t_crit, 2), 'tipo': tipo, 'valor': round(valor, 2)}
 
     @staticmethod
-    def integral_numerica(coefs: dict, t0: float, t1: float, n_passos: int = 100) -> float:
-        """Integral numerica (trapezio) - energia total consumida no intervalo."""
+    def integral_numerica(coefs, t0, t1, n_passos=100):
+        """Integral pelo metodo dos trapezios — energia total consumida no intervalo."""
         dt = (t1 - t0) / n_passos
         soma = 0.5 * (ModelagemMatematica.avaliar(coefs, t0) +
                        ModelagemMatematica.avaliar(coefs, t1))
@@ -438,8 +403,8 @@ class ModelagemMatematica:
         return round(soma * dt, 2)
 
     @staticmethod
-    def r_quadrado(dados: list[dict], coefs: dict) -> float:
-        """Coeficiente de determinacao R2."""
+    def r_quadrado(dados, coefs):
+        """Coeficiente de determinacao R2 — qualidade do ajuste."""
         consumos = [d['consumo_total'] for d in dados]
         media = sum(consumos) / len(consumos)
         ss_tot = sum((y - media)**2 for y in consumos)
@@ -448,29 +413,20 @@ class ModelagemMatematica:
         return round(1 - ss_res / ss_tot, 4) if ss_tot > 0 else 0
 
 
-# ============================================================
-# 5. ANALISE E PREVISAO - REGRESSAO LINEAR E LOGISTICA
-# ============================================================
+# =============================================================================
+# 5. PREVISAO - REGRESSAO LINEAR E LOGISTICA
+# =============================================================================
+# Regressao linear: preve SoC (estado de carga) a partir de consumo e geracao.
+# Regressao logistica: classifica cenarios como critico/normal (binaria).
+# Implementacoes manuais sem bibliotecas externas.
 
 class RegressaoLinear:
-    """Regressao linear multipla para previsao de autonomia (SoC).
-
-    Forma matricial: beta = (X^T X)^-1 X^T y
-    Implementacao sem sklearn para demonstrar o raciocinio.
-    """
+    """Regressao linear multipla: SoC = b0 + b1*consumo + b2*geracao."""
 
     @staticmethod
-    def _inversa_2x2(m):
-        det = m[0][0]*m[1][1] - m[0][1]*m[1][0]
-        if abs(det) < 1e-10:
-            return None
-        return [[m[1][1]/det, -m[0][1]/det], [-m[1][0]/det, m[0][0]/det]]
-
-    @staticmethod
-    def treinar(dados: list[dict]) -> dict:
-        """Treina regressao linear: SoC = b0 + b1*consumo + b2*geracao."""
+    def treinar(dados):
+        """Treina por minimos quadrados — resolve o sistema (X^T X) beta = X^T y."""
         n = len(dados)
-        # X = [1, consumo, geracao_total]
         X = []
         y = []
         for d in dados:
@@ -479,12 +435,11 @@ class RegressaoLinear:
             X.append([1, d['consumo_total'], geracao])
             y.append(d['soc_bateria'])
 
-        # beta = (X^T X)^-1 X^T y  — resolver por eliminacao de Gauss
         k = len(X[0])
         XtX = [[sum(X[i][a]*X[i][b] for i in range(n)) for b in range(k)] for a in range(k)]
         Xty = [sum(X[i][a]*y[i] for i in range(n)) for a in range(k)]
 
-        # Eliminacao de Gauss
+        # Eliminacao de Gauss para resolver o sistema
         aug = [XtX[i][:] + [Xty[i]] for i in range(k)]
         for col in range(k):
             max_row = max(range(col, k), key=lambda r: abs(aug[r][col]))
@@ -500,14 +455,12 @@ class RegressaoLinear:
 
         beta = [aug[i][k] / aug[i][i] if abs(aug[i][i]) > 1e-10 else 0 for i in range(k)]
 
-        # R2
+        # Metricas de qualidade
         y_pred = [sum(beta[j]*X[i][j] for j in range(k)) for i in range(n)]
         y_med = sum(y) / n
         ss_tot = sum((yi - y_med)**2 for yi in y)
         ss_res = sum((yi - yp)**2 for yi, yp in zip(y, y_pred))
         r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
-
-        # RMSE
         rmse = math.sqrt(ss_res / n) if n > 0 else 0
 
         return {
@@ -515,12 +468,13 @@ class RegressaoLinear:
             'r2': round(r2, 4),
             'rmse': round(rmse, 2),
             'variaveis': ['intercepto', 'consumo_total', 'geracao_total'],
-            'formula': f"SoC = {beta[0]:.2f} + ({beta[1]:.4f}) * consumo + ({beta[2]:.4f}) * geracao",
+            'formula': "SoC = {:.2f} + ({:.4f}) * consumo + ({:.4f}) * geracao".format(
+                beta[0], beta[1], beta[2]),
         }
 
     @staticmethod
-    def prever(modelo: dict, consumo: float, geracao: float) -> float:
-        """Preve SoC com base no modelo treinado."""
+    def prever(modelo, consumo, geracao):
+        """Preve SoC (0-100%) com base no modelo treinado."""
         b = modelo['beta']
         return max(0, min(100, round(b[0] + b[1]*consumo + b[2]*geracao, 1)))
 
@@ -529,23 +483,18 @@ class RegressaoLogistica:
     """Regressao logistica para classificacao de cenarios criticos.
 
     Sigmoid: sigma(z) = 1 / (1 + e^(-z))
-    Treinamento por gradient descent na funcao de custo cross-entropy.
+    Treinamento por gradient descent com cross-entropy loss.
     """
 
     @staticmethod
-    def _sigmoid(z: float) -> float:
+    def _sigmoid(z):
         z = max(-500, min(500, z))
         return 1.0 / (1.0 + math.exp(-z))
 
     @staticmethod
-    def treinar(dados: list[dict], lr: float = 0.5, epocas: int = 5000) -> dict:
-        """Treina regressao logistica por gradient descent.
-
-        Features: SoC, consumo, geracao, modulos_ativos, eficiencia
-        Target: critico (0 ou 1)
-        """
+    def treinar(dados, lr=0.5, epocas=5000):
+        """Treina com gradient descent. Features: SoC, consumo, geracao, modulos, eficiencia."""
         n = len(dados)
-        # Normalizar features (min-max)
         features_raw = []
         y = []
         for d in dados:
@@ -557,6 +506,8 @@ class RegressaoLogistica:
             y.append(d['critico'])
 
         k = len(features_raw[0])
+
+        # Normalizacao min-max das features
         mins = [min(features_raw[i][j] for i in range(n)) for j in range(k)]
         maxs = [max(features_raw[i][j] for i in range(n)) for j in range(k)]
         ranges = [maxs[j] - mins[j] if maxs[j] != mins[j] else 1 for j in range(k)]
@@ -565,13 +516,11 @@ class RegressaoLogistica:
                        for j in range(k)] for i in range(n)]
         nf = k + 1
 
-        # Inicializar pesos
+        # Pesos iniciais zerados
         w = [0.0] * nf
 
         # Gradient descent
-        historico_custo = []
         for epoca in range(epocas):
-            custo = 0
             grad = [0.0] * nf
             for i in range(n):
                 z = sum(w[j] * X[i][j] for j in range(nf))
@@ -579,25 +528,10 @@ class RegressaoLogistica:
                 erro = p - y[i]
                 for j in range(nf):
                     grad[j] += erro * X[i][j]
-                # Cross-entropy
-                p_clip = max(1e-10, min(1-1e-10, p))
-                custo += -(y[i] * math.log(p_clip) + (1-y[i]) * math.log(1-p_clip))
-
             for j in range(nf):
                 w[j] -= lr * grad[j] / n
-            if epoca % 100 == 0:
-                historico_custo.append(round(custo / n, 4))
 
-        # Acuracia
-        acertos = 0
-        for i in range(n):
-            z = sum(w[j] * X[i][j] for j in range(nf))
-            pred = 1 if RegressaoLogistica._sigmoid(z) >= 0.5 else 0
-            if pred == y[i]:
-                acertos += 1
-        acuracia = acertos / n
-
-        # Matriz de confusao
+        # Acuracia e matriz de confusao
         tp = fp = tn = fn = 0
         for i in range(n):
             z = sum(w[j] * X[i][j] for j in range(nf))
@@ -607,18 +541,19 @@ class RegressaoLogistica:
             elif pred == 0 and y[i] == 0: tn += 1
             else: fn += 1
 
+        acuracia = (tp + tn) / n
+
         return {
             'pesos': [round(wj, 4) for wj in w],
             'acuracia': round(acuracia, 4),
             'matriz_confusao': {'tp': tp, 'fp': fp, 'tn': tn, 'fn': fn},
             'normalizacao': {'mins': mins, 'ranges': ranges},
-            'variaveis': ['intercepto', 'soc_bateria', 'consumo_total', 'geracao_total', 'modulos_ativos', 'eficiencia_rede'],
-            'historico_custo': historico_custo,
+            'variaveis': ['intercepto', 'soc_bateria', 'consumo_total',
+                          'geracao_total', 'modulos_ativos', 'eficiencia_rede'],
         }
 
     @staticmethod
-    def prever(modelo: dict, soc: float, consumo: float, modulos: int,
-               geracao: float = 30.0, eficiencia: float = 0.88) -> dict:
+    def prever(modelo, soc, consumo, modulos, geracao=30.0, eficiencia=0.88):
         """Preve probabilidade de cenario critico."""
         norm = modelo['normalizacao']
         x_norm = [
@@ -638,43 +573,51 @@ class RegressaoLogistica:
         }
 
 
-# ============================================================
+# =============================================================================
 # 6. ANALISE ESG E SUSTENTABILIDADE
-# ============================================================
+# =============================================================================
+# Calcula metricas ambientais, sociais e de governanca da colonia.
 
 class AnaliseESG:
-    """Analise de sustentabilidade e governanca da infraestrutura."""
+    """Analise de sustentabilidade e governanca."""
 
     @staticmethod
-    def calcular_metricas(dados: list[dict], grafo: GrafoColonia) -> dict:
-        """Calcula metricas ESG da colonia."""
-        # Energia renovavel
+    def calcular_metricas(dados, grafo):
         total_geracao = sum(d['geracao_solar'] + d['geracao_eolica'] for d in dados)
         total_consumo = sum(d['consumo_total'] for d in dados)
         pct_renovavel = (total_geracao / total_consumo * 100) if total_consumo > 0 else 0
 
-        # Eficiencia media da rede
         efic_media = sum(d['eficiencia_rede'] for d in dados) / len(dados) if dados else 0
-
-        # Perdas na transmissao (estimativa baseada no grafo)
-        efic_rede = grafo.eficiencia_rede()
         perda_estimada = (1 - efic_media) * total_consumo
 
-        # Pegada de carbono evitada (vs geradores diesel)
-        # Fator emissao diesel: 0.7 kgCO2/kWh
+        # CO2 evitado comparado com geradores diesel (0.7 kgCO2/kWh)
         co2_evitado = total_geracao * 0.7
 
         # Score ESG composto (0-100)
-        score_e = min(100, pct_renovavel)  # Environmental
-        score_s = min(100, sum(1 for d in dados if d['modulos_ativos'] >= 6) / len(dados) * 100)  # Social
-        score_g = min(100, efic_media * 100)  # Governance
+        score_e = min(100, pct_renovavel)
+        score_s = min(100, sum(1 for d in dados if d['modulos_ativos'] >= 6) / len(dados) * 100)
+        score_g = min(100, efic_media * 100)
         score_esg = round((score_e * 0.4 + score_s * 0.3 + score_g * 0.3), 1)
 
-        # Prioridade de sistemas criticos
         modulos_essenciais = [c for c, m in MODULOS.items() if m['prioridade'] <= 3]
         consumo_essencial = sum(MODULOS[c]['consumo_kwh'] for c in modulos_essenciais)
         consumo_total_mod = sum(m['consumo_kwh'] for m in MODULOS.values())
         pct_essencial = round(consumo_essencial / consumo_total_mod * 100, 1)
+
+        recomendacoes = []
+        if pct_renovavel < 80:
+            recomendacoes.append(('ALTO', 'Energia Renovavel',
+                'Aumentar capacidade solar/eolica (atual: {:.0f}%)'.format(pct_renovavel)))
+        if efic_media < 0.90:
+            recomendacoes.append(('MEDIO', 'Eficiencia da Rede',
+                'Otimizar rotas de distribuicao (eficiencia: {:.1%})'.format(efic_media)))
+        if perda_estimada > 50:
+            recomendacoes.append(('MEDIO', 'Reducao de Perdas',
+                'Reduzir perdas na transmissao ({:.0f} kWh estimados)'.format(perda_estimada)))
+        recomendacoes.append(('ALTO', 'Expansao Planejada',
+            'Priorizar conexoes curtas ao expandir, minimizando perdas'))
+        recomendacoes.append(('ALTO', 'Governanca',
+            'Manter sistemas essenciais (prioridade 1-3) com redundancia energetica'))
 
         return {
             'total_geracao_kwh': round(total_geracao, 1),
@@ -689,569 +632,682 @@ class AnaliseESG:
             'score_g': round(score_g, 1),
             'modulos_essenciais': modulos_essenciais,
             'pct_consumo_essencial': pct_essencial,
-            'recomendacoes': AnaliseESG._gerar_recomendacoes(
-                pct_renovavel, efic_media, perda_estimada),
+            'recomendacoes': recomendacoes,
         }
 
-    @staticmethod
-    def _gerar_recomendacoes(pct_renov, efic, perda):
-        recs = []
-        if pct_renov < 80:
-            recs.append({
-                'area': 'Energia Renovavel',
-                'acao': f'Aumentar capacidade solar/eolica (atual: {pct_renov:.0f}% renovavel)',
-                'impacto': 'alto',
-            })
-        if efic < 0.90:
-            recs.append({
-                'area': 'Eficiencia da Rede',
-                'acao': f'Otimizar rotas de distribuicao (eficiencia atual: {efic:.1%})',
-                'impacto': 'medio',
-            })
-        if perda > 50:
-            recs.append({
-                'area': 'Reducao de Perdas',
-                'acao': f'Reduzir perdas na transmissao ({perda:.0f} kWh estimados)',
-                'impacto': 'medio',
-            })
-        recs.append({
-            'area': 'Expansao Planejada',
-            'acao': 'Priorizar conexoes curtas ao expandir, minimizando perdas',
-            'impacto': 'alto',
-        })
-        recs.append({
-            'area': 'Governanca',
-            'acao': 'Manter sistemas essenciais (prioridade 1-3) com redundancia energetica',
-            'impacto': 'alto',
-        })
-        return recs
 
-
-# ============================================================
-# 7. SISTEMA INTEGRADO
-# ============================================================
+# =============================================================================
+# 7. CLASSE PRINCIPAL DO SISTEMA (SIGIC)
+# =============================================================================
+# Integra todos os modulos: grafo, dados energeticos, modelagem e previsao.
 
 class SIGIC:
     """Sistema Inteligente de Gerenciamento da Infraestrutura da Colonia."""
 
     def __init__(self):
-        # Grafo da rede
+        print("  Inicializando SIGIC...")
+
+        # Construir grafo da rede
         self.grafo = GrafoColonia(LISTA_MODULOS, CONEXOES)
 
-        # Dados energeticos
+        # Carregar dados de energia do CSV
         self.dados_energia = carregar_dados_energia(
             os.path.join(AUX_DIR, 'dados_energia.csv'))
         self.historico = carregar_historico_cenarios(
             os.path.join(AUX_DIR, 'historico_cenarios.csv'))
 
-        # Modelagem matematica
+        # Ajustar modelo matematico (quadratico)
         self.coefs_modelo = ModelagemMatematica.ajustar_modelo(self.dados_energia)
         self.r2_modelo = ModelagemMatematica.r_quadrado(self.dados_energia, self.coefs_modelo)
 
-        # Modelos ML
+        # Treinar modelos de previsao
         self.modelo_linear = RegressaoLinear.treinar(self.historico)
         self.modelo_logistico = RegressaoLogistica.treinar(self.historico)
 
-        # ESG
+        # Calcular metricas ESG
         self.metricas_esg = AnaliseESG.calcular_metricas(self.dados_energia, self.grafo)
 
-    def visao_geral(self) -> dict:
-        ultimo = self.dados_energia[-1]
-        geracao = ultimo['geracao_solar'] + ultimo['geracao_eolica']
-        balanco = geracao - ultimo['consumo_total']
-
-        # Estado de cada modulo
-        status_modulos = {}
-        for cod, mod in MODULOS.items():
-            status_modulos[cod] = {**mod}
-
-        return {
-            'modulos': status_modulos,
-            'energia': {
-                'soc': ultimo['soc_bateria'],
-                'geracao_solar': ultimo['geracao_solar'],
-                'geracao_eolica': ultimo['geracao_eolica'],
-                'geracao_total': geracao,
-                'consumo': ultimo['consumo_total'],
-                'balanco': round(balanco, 1),
-                'eficiencia': ultimo['eficiencia_rede'],
-            },
-            'rede': self.grafo.eficiencia_rede(),
-            'hora_atual': ultimo['hora'],
-            'score_esg': self.metricas_esg['score_esg'],
-        }
-
-    def dados_rede(self) -> dict:
-        adj_lista = {v: [(viz, w) for viz, w in self.grafo.adj_lista[v]]
-                     for v in self.grafo.vertices}
-        return {
-            'vertices': self.grafo.vertices,
-            'adj_lista': adj_lista,
-            'adj_matriz': self.grafo.adj_matriz,
-            'nomes_vertices': [MODULOS[v]['nome'] for v in self.grafo.vertices],
-            'eficiencia': self.grafo.eficiencia_rede(),
-            'articulacoes': self.grafo.detectar_pontos_articulacao(),
-            'conexoes': CONEXOES,
-        }
-
-    def executar_bfs(self, origem: str) -> dict:
-        return self.grafo.bfs(origem)
-
-    def executar_dfs(self, origem: str) -> dict:
-        return self.grafo.dfs(origem)
-
-    def executar_dijkstra(self, origem: str, destino: str) -> dict:
-        return self.grafo.caminho_minimo(origem, destino)
-
-    def dados_energia_api(self) -> dict:
-        return {
-            'horarios': [d['hora'] for d in self.dados_energia],
-            'solar': [d['geracao_solar'] for d in self.dados_energia],
-            'eolica': [d['geracao_eolica'] for d in self.dados_energia],
-            'consumo': [d['consumo_total'] for d in self.dados_energia],
-            'soc': [d['soc_bateria'] for d in self.dados_energia],
-            'eficiencia': [d['eficiencia_rede'] for d in self.dados_energia],
-            'temp': [d['temp_externa'] for d in self.dados_energia],
-        }
-
-    def dados_modelagem(self) -> dict:
-        coefs = self.coefs_modelo
-        pc = ModelagemMatematica.ponto_critico(coefs)
-        horas = list(range(0, 25))
-        valores = [round(ModelagemMatematica.avaliar(coefs, t), 1) for t in horas]
-        derivadas = [round(ModelagemMatematica.derivada(coefs, t), 2) for t in horas]
-        integral = ModelagemMatematica.integral_numerica(coefs, 0, 24)
-
-        return {
-            'coeficientes': coefs,
-            'formula': f"E(t) = {coefs['a']}t^2 + ({coefs['b']})t + {coefs['c']}",
-            'derivada_formula': f"E'(t) = {2*coefs['a']:.6f}t + ({coefs['b']})",
-            'r2': self.r2_modelo,
-            'ponto_critico': pc,
-            'horas': horas,
-            'valores_modelo': valores,
-            'derivadas': derivadas,
-            'energia_total_24h': integral,
-            'dados_reais': [d['consumo_total'] for d in self.dados_energia],
-            'horas_reais': [d['hora'] for d in self.dados_energia],
-        }
-
-    def dados_previsao(self) -> dict:
-        return {
-            'regressao_linear': self.modelo_linear,
-            'regressao_logistica': {
-                'acuracia': self.modelo_logistico['acuracia'],
-                'matriz_confusao': self.modelo_logistico['matriz_confusao'],
-                'variaveis': self.modelo_logistico['variaveis'],
-                'historico_custo': self.modelo_logistico['historico_custo'],
-            },
-        }
-
-    def prever_soc(self, consumo: float, geracao: float) -> dict:
-        soc_previsto = RegressaoLinear.prever(self.modelo_linear, consumo, geracao)
-        estado = RegressaoLogistica.prever(
-            self.modelo_logistico, soc_previsto, consumo, 8,
-            geracao=geracao, eficiencia=0.88)
-        return {
-            'soc_previsto': soc_previsto,
-            'estado': estado,
-            'modelo_linear': self.modelo_linear['formula'],
-        }
-
-    def dados_esg(self) -> dict:
-        return self.metricas_esg
+        print("  Sistema inicializado com sucesso.\n")
 
 
-# ============================================================
-# 8. GERACAO DE PDF - REDE DA COLONIA
-# ============================================================
+# =============================================================================
+# 8. FUNCOES DE EXIBICAO NO TERMINAL
+# =============================================================================
+# Cada funcao exibe uma secao do sistema de forma clara e organizada.
 
-def gerar_rede_pdf(sistema: SIGIC, caminho: str) -> bool:
-    """Gera diagrama da rede em PDF usando fpdf2."""
-    try:
-        from fpdf import FPDF
-    except ImportError:
-        print("  fpdf2 nao instalado. Execute: pip install fpdf2")
-        return False
+def linha(char='=', tamanho=70):
+    print(char * tamanho)
 
-    pdf = FPDF('L', 'mm', 'A4')
-    pdf.add_page()
-    pdf.set_font('Helvetica', 'B', 18)
-    pdf.cell(0, 12, 'Rede da Colonia Aurora Siger - SIGIC', ln=True, align='C')
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 6, 'Fase IV - Energia para Sobreviver | FIAP 2026 | Marcelo Baldin RM568746', ln=True, align='C')
-    pdf.ln(5)
 
-    # Posicoes dos modulos no diagrama (x, y)
-    cx, cy = 148, 120
-    posicoes = {
-        'ARM': (cx, cy - 55),
-        'CTR': (cx - 60, cy - 20),
-        'HAB': (cx + 60, cy - 20),
-        'OXI': (cx + 90, cy + 30),
-        'COM': (cx - 90, cy + 30),
-        'MED': (cx - 40, cy + 50),
-        'AGR': (cx + 40, cy + 50),
-        'LAB': (cx, cy + 80),
-    }
+def titulo(texto):
+    print()
+    linha()
+    print("  " + texto)
+    linha()
 
-    # Desenhar arestas
-    pdf.set_draw_color(100, 150, 200)
-    pdf.set_line_width(0.4)
-    for u, v, w in CONEXOES:
-        x1, y1 = posicoes[u]
-        x2, y2 = posicoes[v]
-        pdf.line(x1, y1, x2, y2)
-        mx, my = (x1+x2)/2, (y1+y2)/2
-        pdf.set_font('Helvetica', '', 7)
-        pdf.set_text_color(150, 100, 50)
-        pdf.text(mx-3, my-1, f"{w} kWh")
 
-    # Desenhar vertices
-    for cod, (x, y) in posicoes.items():
-        mod = MODULOS[cod]
-        cor = (34, 197, 94) if mod['prioridade'] <= 2 else \
-              (59, 130, 246) if mod['prioridade'] <= 4 else (148, 163, 184)
-        pdf.set_fill_color(*cor)
-        pdf.set_draw_color(*cor)
-        pdf.ellipse(x-12, y-8, 24, 16, style='F')
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font('Helvetica', 'B', 7)
-        pdf.text(x-10, y-1, cod)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font('Helvetica', '', 6)
-        pdf.text(x-12, y+6, mod['nome'][:18])
-
-    # Legenda
-    pdf.ln(100)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 8, 'Legenda', ln=True)
-    pdf.set_font('Helvetica', '', 8)
-    pdf.cell(0, 5, 'Verde: Prioridade 1-2 (essencial)  |  Azul: Prioridade 3-4  |  Cinza: Prioridade 5-6', ln=True)
-    pdf.cell(0, 5, 'Pesos nas arestas: custo energetico de transmissao (kWh)', ln=True)
-
-    # Tabela de modulos
-    pdf.ln(5)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 8, 'Modulos da Colonia', ln=True)
-    pdf.set_font('Helvetica', 'B', 8)
-    cols = [30, 45, 25, 20, 25, 80]
-    headers = ['Codigo', 'Nome', 'Consumo', 'Prior.', 'Arm.(kWh)', 'Descricao']
-    for i, h in enumerate(headers):
-        pdf.cell(cols[i], 6, h, border=1)
-    pdf.ln()
-    pdf.set_font('Helvetica', '', 7)
-    for cod in LISTA_MODULOS:
+def listar_modulos_menu():
+    """Exibe lista numerada de modulos para selecao pelo usuario."""
+    print()
+    for i, cod in enumerate(LISTA_MODULOS, 1):
         m = MODULOS[cod]
-        vals = [cod, m['nome'][:18], str(m['consumo_kwh']), str(m['prioridade']),
-                str(m['capacidade_arm_kwh']), m['descricao'][:40]]
-        for i, v in enumerate(vals):
-            pdf.cell(cols[i], 5, v, border=1)
-        pdf.ln()
+        print("    {}. {} ({}) - {}".format(i, m['nome'], cod, m['descricao'][:45]))
+    print()
+
+
+def selecionar_modulo(mensagem="Escolha o modulo"):
+    """Solicita que o usuario selecione um modulo da lista."""
+    listar_modulos_menu()
+    while True:
+        try:
+            escolha = input("  {} (1-{}): ".format(mensagem, len(LISTA_MODULOS)))
+            idx = int(escolha) - 1
+            if 0 <= idx < len(LISTA_MODULOS):
+                return LISTA_MODULOS[idx]
+            print("  Opcao invalida. Tente novamente.")
+        except ValueError:
+            print("  Digite um numero valido.")
+
+
+# ---- 1. Visao geral ----
+def exibir_visao_geral(sistema):
+    titulo("VISAO GERAL DA COLONIA AURORA SIGER")
+    ultimo = sistema.dados_energia[-1]
+    geracao = ultimo['geracao_solar'] + ultimo['geracao_eolica']
+    rede = sistema.grafo.eficiencia_rede()
+
+    print()
+    print("  Colonia: Aurora Siger")
+    print("  Localizacao: Acidalia Planitia, Marte")
+    print("  Modulos operacionais: {}".format(len(MODULOS)))
+    print()
+    print("  --- Energia (ultima leitura - {}h) ---".format(ultimo['hora']))
+    print("  Geracao solar:    {:.0f} kWh".format(ultimo['geracao_solar']))
+    print("  Geracao eolica:   {:.0f} kWh".format(ultimo['geracao_eolica']))
+    print("  Geracao total:    {:.0f} kWh".format(geracao))
+    print("  Consumo total:    {:.0f} kWh".format(ultimo['consumo_total']))
+    print("  Balanco:          {:+.0f} kWh".format(geracao - ultimo['consumo_total']))
+    print("  Bateria (SoC):    {:.0f}%".format(ultimo['soc_bateria']))
+    print("  Eficiencia rede:  {:.1%}".format(ultimo['eficiencia_rede']))
+    print()
+    print("  --- Rede ---")
+    print("  Vertices: {}  |  Arestas: {}".format(rede['vertices'], rede['arestas']))
+    print("  Grau medio: {}  |  Densidade: {}".format(rede['grau_medio'], rede['densidade']))
+    print("  Diametro: {} kWh  |  Custo medio: {} kWh".format(rede['diametro'], rede['custo_medio']))
+    print()
+    print("  --- Modelos ---")
+    print("  Modelagem R2: {}".format(sistema.r2_modelo))
+    print("  Regressao Linear R2: {}".format(sistema.modelo_linear['r2']))
+    print("  Regressao Logistica Acuracia: {:.1%}".format(sistema.modelo_logistico['acuracia']))
+    print("  Score ESG: {}/100".format(sistema.metricas_esg['score_esg']))
+    print()
+
+
+# ---- 2. Visualizar rede (grafo) ----
+def exibir_rede(sistema):
+    titulo("REDE DA COLONIA - REPRESENTACAO EM GRAFOS")
+
+    # Lista de adjacencia
+    print("\n  Lista de adjacencia:")
+    print("  " + "-" * 60)
+    for v in LISTA_MODULOS:
+        vizinhos = sistema.grafo.adj_lista[v]
+        viz_str = ", ".join("{} ({}kWh)".format(viz, w) for viz, w in vizinhos)
+        print("  {} [{}]: {}".format(v, MODULOS[v]['nome'], viz_str))
 
     # Matriz de adjacencia
-    pdf.ln(5)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 8, 'Matriz de Adjacencia', ln=True)
-    pdf.set_font('Helvetica', 'B', 7)
-    cw = 15
-    pdf.cell(cw, 5, '', border=1)
-    for v in LISTA_MODULOS:
-        pdf.cell(cw, 5, v, border=1, align='C')
-    pdf.ln()
-    pdf.set_font('Helvetica', '', 7)
+    print("\n  Matriz de adjacencia:")
+    print("  " + "-" * 60)
+    header = "       " + "  ".join("{:>4}".format(v) for v in LISTA_MODULOS)
+    print(header)
     for i, vi in enumerate(LISTA_MODULOS):
-        pdf.set_font('Helvetica', 'B', 7)
-        pdf.cell(cw, 5, vi, border=1)
-        pdf.set_font('Helvetica', '', 7)
+        row = "  {:>4} ".format(vi)
         for j in range(len(LISTA_MODULOS)):
             val = sistema.grafo.adj_matriz[i][j]
-            pdf.cell(cw, 5, str(val) if val > 0 else '-', border=1, align='C')
-        pdf.ln()
+            row += "  {:>4}".format(val if val > 0 else '-')
+        print(row)
 
-    pdf.output(caminho)
-    return True
-
-
-def gerar_documentacao_pdf(sistema: SIGIC, caminho: str) -> bool:
-    """Gera documentacao complementar em PDF."""
-    try:
-        from fpdf import FPDF
-    except ImportError:
-        return False
-
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
-    larg = 170
-
-    def titulo(t):
-        pdf.set_font('Helvetica', 'B', 14)
-        pdf.set_text_color(0, 80, 160)
-        pdf.cell(0, 10, t, ln=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.ln(2)
-
-    def txt(t, bold=False):
-        pdf.set_font('Helvetica', 'B' if bold else '', 10)
-        pdf.multi_cell(larg, 5, t)
-        pdf.ln(1)
-
-    # Capa
-    pdf.add_page()
-    pdf.set_font('Helvetica', 'B', 22)
-    pdf.ln(40)
-    pdf.cell(0, 12, 'SIGIC', ln=True, align='C')
-    pdf.set_font('Helvetica', '', 14)
-    pdf.cell(0, 8, 'Sistema Inteligente de Gerenciamento', ln=True, align='C')
-    pdf.cell(0, 8, 'da Infraestrutura da Colonia', ln=True, align='C')
-    pdf.ln(15)
-    pdf.set_font('Helvetica', '', 11)
-    pdf.cell(0, 7, 'Fase IV - Energia para Sobreviver', ln=True, align='C')
-    pdf.cell(0, 7, 'FIAP 2026 - Ciencias da Computacao', ln=True, align='C')
-    pdf.ln(8)
-    pdf.cell(0, 7, 'Marcelo Bastianello Baldin - RM568746 - Grupo 13', ln=True, align='C')
-
-    # Infraestrutura
-    pdf.add_page()
-    titulo('1. Infraestrutura da Colonia')
-    txt('A colonia Aurora Siger possui 8 modulos criticos organizados em uma '
-        'rede de distribuicao energetica. Cada modulo tem consumo, prioridade '
-        'e capacidade de armazenamento definidos.')
-    for cod in LISTA_MODULOS:
-        m = MODULOS[cod]
-        txt(f"{cod} - {m['nome']}: consumo {m['consumo_kwh']} kWh, "
-            f"prioridade {m['prioridade']}, {m['descricao']}")
-
-    # Grafos
-    pdf.add_page()
-    titulo('2. Representacao em Grafos')
-    txt('A rede e representada como grafo ponderado nao-dirigido:')
-    txt('- Vertices: 8 modulos da colonia')
-    txt(f'- Arestas: {len(CONEXOES)} conexoes com peso = custo energetico (kWh)')
-    txt('- Representacoes: lista de adjacencia (dicionario) e matriz de adjacencia (lista de listas)')
+    # Metricas
     efic = sistema.grafo.eficiencia_rede()
-    txt(f'Metricas: grau medio {efic["grau_medio"]}, densidade {efic["densidade"]}, '
-        f'diametro {efic["diametro"]} kWh, custo medio {efic["custo_medio"]} kWh')
+    print("\n  Metricas da rede:")
+    print("  Vertices: {}  |  Arestas: {}".format(efic['vertices'], efic['arestas']))
+    print("  Grau medio: {}  |  Densidade: {}".format(efic['grau_medio'], efic['densidade']))
+    print("  Diametro: {} kWh  |  Custo medio: {} kWh".format(efic['diametro'], efic['custo_medio']))
 
-    # Algoritmos
-    pdf.add_page()
-    titulo('3. Algoritmos de Redes')
-    txt('3.1 BFS (Busca em Largura)', bold=True)
-    txt('Explora a rede nivel a nivel usando fila (deque). Complexidade O(V+E). '
-        'Usado para verificar alcancabilidade e encontrar caminho com menor numero de saltos.')
-    txt('3.2 DFS (Busca em Profundidade)', bold=True)
-    txt('Explora em profundidade usando recursao/pilha. Complexidade O(V+E). '
-        'Usado para detectar componentes conectados e ciclos.')
-    txt('3.3 Dijkstra (Caminho Minimo)', bold=True)
-    txt('Encontra caminho de menor custo usando heap (heapq). Complexidade O((V+E) log V). '
-        'Usado para otimizar rotas de distribuicao de energia entre modulos.')
+    # Pontos de articulacao (vertices criticos)
+    articulacoes = sistema.grafo.detectar_pontos_articulacao()
+    if articulacoes:
+        nomes = ", ".join("{} ({})".format(v, MODULOS[v]['nome']) for v in articulacoes)
+        print("\n  Pontos de articulacao (vertices criticos): {}".format(nomes))
+    else:
+        print("\n  Nenhum ponto de articulacao — rede robusta.")
 
-    # Modelagem
-    pdf.add_page()
-    titulo('4. Modelagem Matematica')
+    # Mapa visual em texto
+    print("\n  Diagrama da rede (texto):")
+    print("  " + "-" * 60)
+    print("                    [ARM] Armazenamento de Energia")
+    print("                   / | \\  \\")
+    print("                5/  8|  10\\ 12\\")
+    print("                /   |    \\   \\")
+    print("         [CTR]---6--[HAB]  [OXI] [COM]")
+    print("          |  \\       |  \\     |     |")
+    print("         4|  7\\     9| 11\\  15|   13|")
+    print("          |    \\    |    \\   |     |")
+    print("        [COM] [MED] |  [AGR]       |")
+    print("          |     |   |     |         |")
+    print("         13\\  10|   |   14|         |")
+    print("            \\   |   |    /          |")
+    print("             [LAB]-----/------------/")
+    print("  " + "-" * 60)
+    print("  Pesos = custo energetico de transmissao (kWh)")
+    print()
+
+
+# ---- 3. Consultar modulos ----
+def consultar_modulo(sistema):
+    titulo("CONSULTAR MODULO")
+    cod = selecionar_modulo("Selecione o modulo para consultar")
+    m = MODULOS[cod]
+
+    print()
+    linha('-', 50)
+    print("  Modulo: {} ({})".format(m['nome'], cod))
+    linha('-', 50)
+    print("  Descricao:     {}".format(m['descricao']))
+    print("  Consumo:       {} kWh/h".format(m['consumo_kwh']))
+    print("  Prioridade:    {} ({})".format(m['prioridade'],
+        'essencial' if m['prioridade'] <= 2 else 'importante' if m['prioridade'] <= 4 else 'operacional'))
+    print("  Armazenamento: {} kWh".format(m['capacidade_arm_kwh']))
+    print("  Dist. ao hub:  {} m".format(m['distancia_hub_m']))
+    print("  Status:        {}".format(m['status'].upper()))
+
+    # Conexoes deste modulo no grafo
+    vizinhos = sistema.grafo.adj_lista[cod]
+    print("\n  Conexoes na rede:")
+    for viz, peso in vizinhos:
+        print("    -> {} ({}) — custo {} kWh".format(viz, MODULOS[viz]['nome'], peso))
+
+    # Caminho minimo ate Armazenamento de Energia
+    if cod != 'ARM':
+        resultado = sistema.grafo.caminho_minimo('ARM', cod)
+        if resultado['existe']:
+            caminho_str = " -> ".join(resultado['caminho'])
+            print("\n  Rota otima de energia (ARM -> {}):".format(cod))
+            print("    Caminho: {}".format(caminho_str))
+            print("    Custo total: {} kWh".format(resultado['custo']))
+    print()
+
+
+# ---- 4. Caminho minimo (Dijkstra) ----
+def executar_caminho_minimo(sistema):
+    titulo("CAMINHO MINIMO - ALGORITMO DE DIJKSTRA")
+    print("\n  O algoritmo de Dijkstra encontra a rota de menor custo energetico")
+    print("  entre dois modulos da colonia.\n")
+
+    print("  Selecione a ORIGEM:")
+    origem = selecionar_modulo("Modulo de origem")
+
+    print("  Selecione o DESTINO:")
+    destino = selecionar_modulo("Modulo de destino")
+
+    if origem == destino:
+        print("\n  Origem e destino sao o mesmo modulo.")
+        return
+
+    resultado = sistema.grafo.caminho_minimo(origem, destino)
+
+    print()
+    linha('-', 50)
+    if resultado['existe']:
+        caminho_str = " -> ".join(resultado['caminho'])
+        print("  Origem:  {} ({})".format(origem, MODULOS[origem]['nome']))
+        print("  Destino: {} ({})".format(destino, MODULOS[destino]['nome']))
+        print("  Caminho: {}".format(caminho_str))
+        print("  Custo total: {} kWh".format(resultado['custo']))
+        print("  Saltos: {}".format(len(resultado['caminho']) - 1))
+
+        # Detalhar cada trecho
+        print("\n  Detalhamento do caminho:")
+        cam = resultado['caminho']
+        for i in range(len(cam) - 1):
+            u, v = cam[i], cam[i + 1]
+            peso = 0
+            for viz, w in sistema.grafo.adj_lista[u]:
+                if viz == v:
+                    peso = w
+                    break
+            print("    {} -> {}: {} kWh".format(u, v, peso))
+    else:
+        print("  Nao existe caminho entre {} e {}.".format(origem, destino))
+    linha('-', 50)
+
+    # Mostrar tambem todos os custos a partir da origem (tabela Dijkstra)
+    djk = sistema.grafo.dijkstra(origem)
+    print("\n  Custos minimos a partir de {} ({}):".format(origem, MODULOS[origem]['nome']))
+    print("  {:>6} | {:>25} | {:>10}".format("Codigo", "Nome", "Custo (kWh)"))
+    print("  " + "-" * 48)
+    for v in LISTA_MODULOS:
+        custo = djk['distancias'][v]
+        custo_str = str(custo) if custo < float('inf') else "---"
+        print("  {:>6} | {:>25} | {:>10}".format(v, MODULOS[v]['nome'], custo_str))
+    print()
+
+
+# ---- 5. BFS e DFS ----
+def executar_bfs_dfs(sistema):
+    titulo("BUSCA EM LARGURA (BFS) E PROFUNDIDADE (DFS)")
+
+    print("  Selecione o vertice de origem:")
+    origem = selecionar_modulo("Vertice de origem")
+
+    # BFS
+    res_bfs = sistema.grafo.bfs(origem)
+    print("\n  --- BFS (Busca em Largura) a partir de {} ---".format(origem))
+    print("  Ordem de visita: {}".format(" -> ".join(res_bfs['ordem'])))
+    print("  Distancias (numero de saltos):")
+    for v in res_bfs['ordem']:
+        pred = res_bfs['predecessores'][v]
+        pred_str = pred if pred else "-"
+        print("    {} ({}): {} salto(s), predecessor: {}".format(
+            v, MODULOS[v]['nome'], res_bfs['distancias'][v], pred_str))
+
+    # DFS
+    res_dfs = sistema.grafo.dfs(origem)
+    print("\n  --- DFS (Busca em Profundidade) a partir de {} ---".format(origem))
+    print("  Ordem de visita: {}".format(" -> ".join(res_dfs['ordem'])))
+    print("  Predecessores:")
+    for v in res_dfs['ordem']:
+        pred = res_dfs['predecessores'][v]
+        pred_str = pred if pred else "-"
+        print("    {} ({}): predecessor: {}".format(v, MODULOS[v]['nome'], pred_str))
+    print()
+
+
+# ---- 6. Dados energeticos ----
+def exibir_energia(sistema):
+    titulo("DADOS ENERGETICOS - SERIE TEMPORAL 24H")
+
+    print("\n  {:>5} | {:>7} | {:>7} | {:>7} | {:>7} | {:>6} | {:>5} | {:>5}".format(
+        "Hora", "Solar", "Eolica", "Total G", "Consumo", "Bal.", "SoC%", "Efic"))
+    print("  " + "-" * 70)
+
+    for d in sistema.dados_energia:
+        geracao = d['geracao_solar'] + d['geracao_eolica']
+        balanco = geracao - d['consumo_total']
+        print("  {:>4}h | {:>5.0f}kW | {:>5.0f}kW | {:>5.0f}kW | {:>5.0f}kW | {:>+5.0f} | {:>4.0f}% | {:.0%}".format(
+            d['hora'], d['geracao_solar'], d['geracao_eolica'],
+            geracao, d['consumo_total'], balanco,
+            d['soc_bateria'], d['eficiencia_rede']))
+
+    # Resumo
+    total_ger = sum(d['geracao_solar'] + d['geracao_eolica'] for d in sistema.dados_energia)
+    total_con = sum(d['consumo_total'] for d in sistema.dados_energia)
+    print()
+    print("  Geracao total (24h):  {:.0f} kWh".format(total_ger))
+    print("  Consumo total (24h):  {:.0f} kWh".format(total_con))
+    print("  Balanco diario:       {:+.0f} kWh".format(total_ger - total_con))
+    print("  SoC inicial: {:.0f}%  |  SoC final: {:.0f}%".format(
+        sistema.dados_energia[0]['soc_bateria'],
+        sistema.dados_energia[-1]['soc_bateria']))
+    print()
+
+
+# ---- 7. Modelagem matematica ----
+def exibir_modelagem(sistema):
+    titulo("MODELAGEM MATEMATICA - CALCULO DIFERENCIAL")
     coefs = sistema.coefs_modelo
-    txt(f'Funcao de consumo: E(t) = {coefs["a"]}t^2 + ({coefs["b"]})t + {coefs["c"]}')
-    txt(f'Derivada: E\'(t) = {2*coefs["a"]:.6f}t + ({coefs["b"]})')
+
+    print("\n  Funcao ajustada de consumo:")
+    print("    E(t) = {:.6f} * t^2 + ({:.4f}) * t + {:.2f}".format(
+        coefs['a'], coefs['b'], coefs['c']))
+    print("\n  Derivada (taxa de variacao instantanea):")
+    print("    E'(t) = {:.6f} * t + ({:.4f})".format(2*coefs['a'], coefs['b']))
+
     pc = ModelagemMatematica.ponto_critico(coefs)
-    if pc['t_critico']:
-        txt(f'Ponto critico: t* = {pc["t_critico"]}h ({pc["tipo"]}, E = {pc["valor"]} kWh)')
-    txt(f'R2 do ajuste: {sistema.r2_modelo}')
+    if pc['t_critico'] is not None:
+        print("\n  Ponto critico: t* = {:.2f}h ({})".format(pc['t_critico'], pc['tipo']))
+        print("    E(t*) = {:.2f} kWh".format(pc['valor']))
+
+    print("\n  R2 (qualidade do ajuste): {}".format(sistema.r2_modelo))
+
     integral = ModelagemMatematica.integral_numerica(coefs, 0, 24)
-    txt(f'Energia total consumida em 24h (integral): {integral} kWh')
+    print("  Energia total consumida em 24h (integral): {} kWh".format(integral))
 
-    # Previsao
-    pdf.add_page()
-    titulo('5. Previsao e Classificacao')
-    txt('5.1 Regressao Linear (Previsao de SoC)', bold=True)
+    # Tabela: hora x valor real x valor modelo x derivada
+    print("\n  {:>6} | {:>12} | {:>12} | {:>12} | {:>8}".format(
+        "Hora", "Consumo Real", "Modelo E(t)", "Erro", "E'(t)"))
+    print("  " + "-" * 58)
+    for d in sistema.dados_energia:
+        t = d['hora']
+        real = d['consumo_total']
+        modelo = ModelagemMatematica.avaliar(coefs, t)
+        deriv = ModelagemMatematica.derivada(coefs, t)
+        erro = real - modelo
+        print("  {:>4}h  | {:>10.1f}kW | {:>10.1f}kW | {:>+10.1f}  | {:>+7.2f}".format(
+            t, real, modelo, erro, deriv))
+    print()
+
+
+# ---- 8. Previsao (regressao linear e logistica) ----
+def exibir_previsao(sistema):
+    titulo("PREVISAO E CLASSIFICACAO")
+
+    # Regressao linear
     ml = sistema.modelo_linear
-    txt(f'Formula: {ml["formula"]}')
-    txt(f'R2: {ml["r2"]}, RMSE: {ml["rmse"]}')
-    txt('5.2 Regressao Logistica (Classificacao Critico/Normal)', bold=True)
+    print("\n  --- Regressao Linear (Previsao de SoC) ---")
+    print("  Formula: {}".format(ml['formula']))
+    print("  R2: {}  |  RMSE: {}".format(ml['r2'], ml['rmse']))
+    print("  Variaveis: {}".format(", ".join(ml['variaveis'])))
+
+    # Regressao logistica
     mlog = sistema.modelo_logistico
-    txt(f'Acuracia: {mlog["acuracia"]:.1%}')
     mc = mlog['matriz_confusao']
-    txt(f'Matriz de confusao: VP={mc["tp"]} FP={mc["fp"]} VN={mc["tn"]} FN={mc["fn"]}')
+    print("\n  --- Regressao Logistica (Classificacao Critico/Normal) ---")
+    print("  Acuracia: {:.1%}".format(mlog['acuracia']))
+    print("  Matriz de confusao:")
+    print("                   Previsto")
+    print("                  Normal  Critico")
+    print("    Real Normal  |  {:>3}   |  {:>3}  |".format(mc['tn'], mc['fp']))
+    print("    Real Critico |  {:>3}   |  {:>3}  |".format(mc['fn'], mc['tp']))
+    print("  Variaveis: {}".format(", ".join(mlog['variaveis'][1:])))
 
-    # ESG
-    pdf.add_page()
-    titulo('6. Sustentabilidade e ESG')
+    # Previsao interativa
+    print("\n  --- Previsao Interativa ---")
+    try:
+        consumo = float(input("  Informe o consumo total (kWh, ex: 180): "))
+        geracao = float(input("  Informe a geracao total (kWh, ex: 40): "))
+
+        soc_prev = RegressaoLinear.prever(ml, consumo, geracao)
+        estado = RegressaoLogistica.prever(
+            mlog, soc_prev, consumo, 8, geracao=geracao, eficiencia=0.88)
+
+        print("\n  Resultado da previsao:")
+        print("    SoC previsto:   {:.1f}%".format(soc_prev))
+        print("    Classificacao:  {}".format(estado['classificacao']))
+        print("    Probabilidade de ser critico: {:.1%}".format(estado['probabilidade_critico']))
+        print("    Confianca: {:.1%}".format(estado['confianca']))
+    except ValueError:
+        print("  Valor invalido. Retornando ao menu.")
+    print()
+
+
+# ---- 9. Simulacao operacional ----
+def simular_operacao(sistema):
+    titulo("SIMULACAO OPERACIONAL")
+
+    print("\n  Cenarios de simulacao disponiveis:")
+    print("    1. Falha no Armazenamento de Energia (ARM desativado)")
+    print("    2. Demanda critica no Centro Medico (MED)")
+    print("    3. Tempestade solar (geracao reduzida)")
+    print("    4. Expansao da colonia (novo modulo)")
+    print("    5. Simular envio de energia a um modulo especifico")
+
+    try:
+        opcao = input("\n  Selecione o cenario (1-5): ")
+    except (EOFError, KeyboardInterrupt):
+        return
+
+    if opcao == '1':
+        # Simulacao: ARM desativado — recalcular rotas sem ARM
+        titulo("SIMULACAO: FALHA NO ARMAZENAMENTO DE ENERGIA")
+        print("\n  Cenario: O modulo ARM (Armazenamento de Energia) sofreu uma falha.")
+        print("  O sistema precisa redistribuir energia sem passar por ARM.\n")
+
+        vertices_sem_arm = [v for v in LISTA_MODULOS if v != 'ARM']
+        arestas_sem_arm = [(u, v, w) for u, v, w in CONEXOES if u != 'ARM' and v != 'ARM']
+        grafo_temp = GrafoColonia(vertices_sem_arm, arestas_sem_arm)
+
+        print("  Rede sem ARM: {} vertices, {} arestas".format(
+            grafo_temp.n, sum(1 for v in grafo_temp.vertices for _ in grafo_temp.adj_lista[v]) // 2))
+
+        # Verificar conectividade
+        bfs_res = grafo_temp.bfs(vertices_sem_arm[0])
+        conectados = len(bfs_res['ordem'])
+        if conectados < len(vertices_sem_arm):
+            print("  ALERTA: Rede DESCONECTADA! {} de {} modulos alcancaveis.".format(
+                conectados, len(vertices_sem_arm)))
+        else:
+            print("  Rede permanece conexa ({} modulos alcancaveis).".format(conectados))
+
+        # Novos caminhos
+        print("\n  Novos caminhos de distribuicao (sem ARM):")
+        for dest in vertices_sem_arm:
+            if dest == 'CTR':
+                continue
+            res = grafo_temp.caminho_minimo('CTR', dest)
+            if res['existe']:
+                print("    CTR -> {}: {} (custo: {} kWh)".format(
+                    dest, " -> ".join(res['caminho']), res['custo']))
+            else:
+                print("    CTR -> {}: SEM ROTA DISPONIVEL".format(dest))
+
+    elif opcao == '2':
+        # Simulacao: demanda critica no Centro Medico
+        titulo("SIMULACAO: DEMANDA CRITICA NO CENTRO MEDICO")
+        print("\n  Cenario: Emergencia medica! MED precisa de energia urgente.")
+        print("  Encontrando a rota mais eficiente de ARM para MED.\n")
+
+        resultado = sistema.grafo.caminho_minimo('ARM', 'MED')
+        if resultado['existe']:
+            print("  Rota otima: {}".format(" -> ".join(resultado['caminho'])))
+            print("  Custo: {} kWh".format(resultado['custo']))
+            print("  Consumo atual do MED: {} kWh/h".format(MODULOS['MED']['consumo_kwh']))
+            print("  Consumo emergencial estimado: {} kWh/h".format(
+                MODULOS['MED']['consumo_kwh'] * 2))
+            print("\n  Acao: priorizar rota ARM -> MED, reduzir modulos nao-essenciais.")
+
+            # Modulos que podem ser reduzidos
+            print("\n  Modulos candidatos a reducao de consumo:")
+            for cod in LISTA_MODULOS:
+                m = MODULOS[cod]
+                if m['prioridade'] >= 5:
+                    print("    {} ({}) — {} kWh/h (prioridade {})".format(
+                        cod, m['nome'], m['consumo_kwh'], m['prioridade']))
+
+    elif opcao == '3':
+        # Simulacao: tempestade solar
+        titulo("SIMULACAO: TEMPESTADE SOLAR")
+        print("\n  Cenario: Tempestade solar reduz geracao em 60%.")
+        print("  Analisando impacto no balanco energetico.\n")
+
+        consumo_total = sum(m['consumo_kwh'] for m in MODULOS.values())
+        print("  Consumo total da colonia: {} kWh/h".format(consumo_total))
+
+        for d in sistema.dados_energia:
+            ger_original = d['geracao_solar'] + d['geracao_eolica']
+            ger_reduzida = ger_original * 0.4
+            deficit = ger_reduzida - d['consumo_total']
+            status = "OK" if deficit >= 0 else "DEFICIT"
+            print("    {:>2}h: geracao {:.0f}->{:.0f} kWh | consumo {:.0f} | balanco {:+.0f} | {}".format(
+                d['hora'], ger_original, ger_reduzida, d['consumo_total'], deficit, status))
+
+        print("\n  Recomendacao: ativar protocolo de economia e desligar modulos de prioridade >= 5.")
+
+    elif opcao == '4':
+        # Simulacao: expansao com novo modulo
+        titulo("SIMULACAO: EXPANSAO DA COLONIA")
+        print("\n  Cenario: Adicionar modulo 'Estacao de Reciclagem' (REC).")
+        print("  Novo modulo: consumo 20 kWh, prioridade 4.\n")
+
+        novos_vertices = LISTA_MODULOS + ['REC']
+        novas_arestas = CONEXOES + [('AGR', 'REC', 8), ('LAB', 'REC', 6)]
+        grafo_exp = GrafoColonia(novos_vertices, novas_arestas)
+
+        efic_antes = sistema.grafo.eficiencia_rede()
+        efic_depois = grafo_exp.eficiencia_rede()
+
+        print("  Comparacao antes/depois da expansao:")
+        print("  {:>20} | {:>10} | {:>10}".format("Metrica", "Antes", "Depois"))
+        print("  " + "-" * 46)
+        print("  {:>20} | {:>10} | {:>10}".format("Vertices", efic_antes['vertices'], efic_depois['vertices']))
+        print("  {:>20} | {:>10} | {:>10}".format("Arestas", efic_antes['arestas'], efic_depois['arestas']))
+        print("  {:>20} | {:>10} | {:>10}".format("Grau medio", efic_antes['grau_medio'], efic_depois['grau_medio']))
+        print("  {:>20} | {:>10} | {:>10}".format("Densidade", efic_antes['densidade'], efic_depois['densidade']))
+        print("  {:>20} | {:>10} | {:>10}".format("Diametro (kWh)", efic_antes['diametro'], efic_depois['diametro']))
+
+        # Caminho ARM -> REC
+        res = grafo_exp.caminho_minimo('ARM', 'REC')
+        if res['existe']:
+            print("\n  Rota otima ARM -> REC: {}".format(" -> ".join(res['caminho'])))
+            print("  Custo: {} kWh".format(res['custo']))
+
+    elif opcao == '5':
+        # Simulacao: envio de energia a modulo especifico (exemplo do enunciado)
+        titulo("SIMULACAO: ENVIO DE ENERGIA A MODULO ESPECIFICO")
+        print("\n  Selecione o modulo de DESTINO para envio de energia a partir de ARM:")
+        destino = selecionar_modulo("Modulo destino")
+
+        if destino == 'ARM':
+            print("  ARM ja e a origem de energia. Selecione outro modulo.")
+        else:
+            resultado = sistema.grafo.caminho_minimo('ARM', destino)
+            print()
+            linha('-', 55)
+            print("  Envio de energia: ARM -> {} ({})".format(destino, MODULOS[destino]['nome']))
+            linha('-', 55)
+
+            if resultado['existe']:
+                caminho_str = " -> ".join(resultado['caminho'])
+                print("  Algoritmo: Dijkstra (caminho de menor custo)")
+                print("  Rota encontrada: {}".format(caminho_str))
+                print("  Custo de transmissao: {} kWh".format(resultado['custo']))
+                print("  Numero de saltos: {}".format(len(resultado['caminho']) - 1))
+                print("  Consumo do modulo destino: {} kWh/h".format(MODULOS[destino]['consumo_kwh']))
+
+                # Detalhar cada trecho
+                print("\n  Trechos da rota:")
+                cam = resultado['caminho']
+                for i in range(len(cam) - 1):
+                    u, v = cam[i], cam[i + 1]
+                    peso = 0
+                    for viz, w in sistema.grafo.adj_lista[u]:
+                        if viz == v:
+                            peso = w
+                            break
+                    print("    {} ({}) -> {} ({}): {} kWh".format(
+                        u, MODULOS[u]['nome'], v, MODULOS[v]['nome'], peso))
+            else:
+                print("  Nao ha rota disponivel de ARM para {}.".format(destino))
+    else:
+        print("  Opcao invalida.")
+    print()
+
+
+# ---- 10. Sustentabilidade e ESG ----
+def exibir_esg(sistema):
+    titulo("SUSTENTABILIDADE E GOVERNANCA (ESG)")
     esg = sistema.metricas_esg
-    txt(f'Score ESG: {esg["score_esg"]}/100')
-    txt(f'Energia renovavel: {esg["pct_renovavel"]:.1f}%')
-    txt(f'CO2 evitado: {esg["co2_evitado_kg"]:.1f} kg')
-    txt(f'Eficiencia media: {esg["eficiencia_media"]:.1%}')
-    for rec in esg['recomendacoes']:
-        txt(f'- [{rec["impacto"].upper()}] {rec["area"]}: {rec["acao"]}')
 
-    pdf.output(caminho)
-    return True
+    print("\n  Score ESG: {}/100".format(esg['score_esg']))
+    print("    Environmental (E): {}/100".format(esg['score_e']))
+    print("    Social (S):        {}/100".format(esg['score_s']))
+    print("    Governance (G):    {}/100".format(esg['score_g']))
 
+    print("\n  --- Metricas Energeticas ---")
+    print("  Geracao total (24h):     {:.1f} kWh".format(esg['total_geracao_kwh']))
+    print("  Consumo total (24h):     {:.1f} kWh".format(esg['total_consumo_kwh']))
+    print("  % Energia renovavel:     {:.1f}%".format(esg['pct_renovavel']))
+    print("  CO2 evitado:             {:.1f} kg".format(esg['co2_evitado_kg']))
+    print("  Eficiencia media rede:   {:.1%}".format(esg['eficiencia_media']))
+    print("  Perdas estimadas:        {:.1f} kWh".format(esg['perda_estimada_kwh']))
 
-# ============================================================
-# 9. APLICACAO FLASK
-# ============================================================
+    print("\n  --- Sistemas Essenciais ---")
+    print("  Modulos essenciais (prioridade 1-3): {}".format(
+        ", ".join(esg['modulos_essenciais'])))
+    print("  Consumo essencial: {:.1f}% do total".format(esg['pct_consumo_essencial']))
 
-app = Flask(__name__, template_folder=os.path.join(AUX_DIR, 'templates'))
-app.secret_key = 'sigic-fase4-2026-fiap-rm568746'
+    print("\n  --- Recomendacoes ---")
+    for impacto, area, acao in esg['recomendacoes']:
+        print("  [{}] {}: {}".format(impacto, area, acao))
 
-sistema: SIGIC | None = None
-
-
-def login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'usuario' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated
-
-
-@app.route('/')
-def index():
-    return redirect(url_for('login'))
+    print("\n  --- Reflexao sobre Sustentabilidade e Governanca ---")
+    print("  A colonia Aurora Siger depende de fontes renovaveis (solar e eolica)")
+    print("  para toda sua operacao em Marte. A governanca e garantida por um")
+    print("  sistema de prioridades que protege modulos essenciais (suporte a vida,")
+    print("  oxigenio, controle) mesmo em cenarios de crise energetica. A rede de")
+    print("  distribuicao em grafo permite otimizar rotas e identificar pontos")
+    print("  criticos, garantindo resiliencia e eficiencia na alocacao de recursos.")
+    print()
 
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        usr = request.form.get('usuario', '')
-        pwd = request.form.get('senha', '')
-        if usr in USUARIOS and USUARIOS[usr]['senha'] == pwd:
-            session['usuario'] = usr
-            session['nome'] = USUARIOS[usr]['nome']
-            return redirect(url_for('dashboard'))
-        return render_template('login.html', erro='Credenciais invalidas')
-    return render_template('login.html')
+# =============================================================================
+# 9. MENU PRINCIPAL
+# =============================================================================
+
+def exibir_menu():
+    """Exibe o menu principal do sistema."""
+    print()
+    linha('=')
+    print("  SIGIC - Menu Principal")
+    linha('=')
+    print("   1. Visao geral da colonia")
+    print("   2. Visualizar rede (grafo)")
+    print("   3. Consultar modulo")
+    print("   4. Caminho minimo (Dijkstra)")
+    print("   5. BFS e DFS")
+    print("   6. Dados energeticos (24h)")
+    print("   7. Modelagem matematica")
+    print("   8. Previsao e classificacao")
+    print("   9. Simulacao operacional")
+    print("  10. Sustentabilidade e ESG")
+    print("   0. Sair")
+    linha('=')
 
 
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    return render_template('dashboard.html', nome=session.get('nome'))
+def main():
+    """Funcao principal — inicializa o sistema e exibe o menu interativo."""
 
+    print()
+    print("#" * 70)
+    print("#" + " " * 68 + "#")
+    print("#   SIGIC - Sistema Inteligente de Gerenciamento da Infraestrutura  #")
+    print("#                     da Colonia Aurora Siger                       #")
+    print("#   Fase IV - Energia para Sobreviver | FIAP 2026                   #")
+    print("#   Marcelo Bastianello Baldin - RM568746 - Grupo 13                #")
+    print("#" + " " * 68 + "#")
+    print("#" * 70)
+    print()
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-
-# ---------- API ----------
-
-@app.route('/api/visao-geral')
-@login_required
-def api_visao_geral():
-    return jsonify(sistema.visao_geral())
-
-
-@app.route('/api/rede')
-@login_required
-def api_rede():
-    return jsonify(sistema.dados_rede())
-
-
-@app.route('/api/bfs/<origem>')
-@login_required
-def api_bfs(origem):
-    if origem not in LISTA_MODULOS:
-        return jsonify({'erro': 'Modulo invalido'}), 400
-    return jsonify(sistema.executar_bfs(origem))
-
-
-@app.route('/api/dfs/<origem>')
-@login_required
-def api_dfs(origem):
-    if origem not in LISTA_MODULOS:
-        return jsonify({'erro': 'Modulo invalido'}), 400
-    return jsonify(sistema.executar_dfs(origem))
-
-
-@app.route('/api/dijkstra/<origem>/<destino>')
-@login_required
-def api_dijkstra(origem, destino):
-    if origem not in LISTA_MODULOS or destino not in LISTA_MODULOS:
-        return jsonify({'erro': 'Modulo invalido'}), 400
-    return jsonify(sistema.executar_dijkstra(origem, destino))
-
-
-@app.route('/api/energia')
-@login_required
-def api_energia():
-    return jsonify(sistema.dados_energia_api())
-
-
-@app.route('/api/modelagem')
-@login_required
-def api_modelagem():
-    return jsonify(sistema.dados_modelagem())
-
-
-@app.route('/api/previsao')
-@login_required
-def api_previsao():
-    return jsonify(sistema.dados_previsao())
-
-
-@app.route('/api/prever', methods=['POST'])
-@login_required
-def api_prever():
-    dados = request.get_json()
-    consumo = float(dados.get('consumo', 180))
-    geracao = float(dados.get('geracao', 30))
-    return jsonify(sistema.prever_soc(consumo, geracao))
-
-
-@app.route('/api/esg')
-@login_required
-def api_esg():
-    return jsonify(sistema.dados_esg())
-
-
-@app.route('/api/gerar-pdfs')
-@login_required
-def api_gerar_pdfs():
-    ok1 = gerar_rede_pdf(sistema, os.path.join(BASE_DIR, 'rede_colonia.pdf'))
-    ok2 = gerar_documentacao_pdf(sistema, os.path.join(BASE_DIR, 'documentacao_complementar.pdf'))
-    if ok1 and ok2:
-        return jsonify({'status': 'ok', 'mensagem': 'PDFs gerados com sucesso'})
-    return jsonify({'status': 'erro', 'mensagem': 'fpdf2 nao instalado'}), 500
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-if __name__ == '__main__':
+    # Inicializar sistema (carrega dados, treina modelos)
     sistema = SIGIC()
 
-    print()
-    print('=' * 60)
-    print('  SIGIC - Gerenciamento da Infraestrutura da Colonia')
-    print('  Fase IV - Energia para Sobreviver | FIAP 2026')
-    print('=' * 60)
-    print()
+    while True:
+        exibir_menu()
 
-    visao = sistema.visao_geral()
-    print(f'  Modulos: {len(MODULOS)} configurados')
-    print(f'  Conexoes: {len(CONEXOES)} arestas no grafo')
-    print(f'  SoC bateria: {visao["energia"]["soc"]}%')
-    print(f'  Score ESG: {visao["score_esg"]}/100')
-    print()
+        try:
+            opcao = input("\n  Escolha uma opcao (0-10): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n\n  Encerrando SIGIC. Ate a proxima!")
+            break
 
-    rede = sistema.grafo.eficiencia_rede()
-    print(f'  Rede: {rede["vertices"]} vertices, {rede["arestas"]} arestas')
-    print(f'  Grau medio: {rede["grau_medio"]}, Densidade: {rede["densidade"]}')
-    print(f'  Diametro: {rede["diametro"]} kWh')
-    print()
+        if opcao == '1':
+            exibir_visao_geral(sistema)
+        elif opcao == '2':
+            exibir_rede(sistema)
+        elif opcao == '3':
+            consultar_modulo(sistema)
+        elif opcao == '4':
+            executar_caminho_minimo(sistema)
+        elif opcao == '5':
+            executar_bfs_dfs(sistema)
+        elif opcao == '6':
+            exibir_energia(sistema)
+        elif opcao == '7':
+            exibir_modelagem(sistema)
+        elif opcao == '8':
+            exibir_previsao(sistema)
+        elif opcao == '9':
+            simular_operacao(sistema)
+        elif opcao == '10':
+            exibir_esg(sistema)
+        elif opcao == '0':
+            print("\n  Encerrando SIGIC. Ate a proxima!\n")
+            break
+        else:
+            print("\n  Opcao invalida. Tente novamente.")
 
-    print(f'  Regressao Linear R2: {sistema.modelo_linear["r2"]}')
-    print(f'  Regressao Logistica Acuracia: {sistema.modelo_logistico["acuracia"]:.1%}')
-    print(f'  Modelagem R2: {sistema.r2_modelo}')
-    print()
-    print('  Acesse: http://localhost:5050')
-    print('  Usuario: usuario | Senha: senha')
-    print('  Para encerrar: Ctrl+C')
-    print()
+        input("  Pressione ENTER para continuar...")
 
-    app.run(host='0.0.0.0', port=5050, debug=False)
+
+if __name__ == '__main__':
+    main()
